@@ -1,0 +1,59 @@
+{
+  // Workspace multi-raíz: cada proyecto es una "raíz" independiente,
+  // así Java detecta cada pom.xml y Solidity encuentra foundry.toml.
+  "folders": [
+    { "name": "root", "path": "." },
+    { "name": "contracts", "path": "contracts" },
+    { "name": "core-api", "path": "core-api" },
+    { "name": "chain-service", "path": "chain-service" },
+    { "name": "portal", "path": "portal" }
+  ],
+  "settings": {
+    "editor.formatOnSave": true,
+    "files.exclude": {
+      "**/target": true,
+      "**/node_modules": true,
+      "**/.DS_Store": true
+    },
+    "search.exclude": {
+      "**/lib": true,
+      "**/out": true,
+      "**/cache": true,
+      "**/broadcast": true,
+      "**/dist": true
+    },
+
+    // Solidity (extensión de Nomic Foundation) formateando con forge fmt
+    "[solidity]": {
+      "editor.defaultFormatter": "NomicFoundation.hardhat-solidity"
+    },
+    "solidity.formatter": "forge",
+
+    // Java / Spring Boot
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.compile.nullAnalysis.mode": "automatic",
+
+    // Frontend
+    "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+
+    // YAML / docker-compose
+    "[yaml]": { "editor.defaultFormatter": "redhat.vscode-yaml" }
+  },
+  "extensions": {
+    "recommendations": [
+      "tamasfe.even-better-toml",
+      "vscjava.vscode-java-pack",
+      "vmware.vscode-boot-dev-pack",
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode",
+      "redhat.vscode-yaml",
+      "ms-azuretools.vscode-containers"
+    ],
+    "unwantedRecommendations": [
+      "JuanBlanco.solidity"
+    ]
+  }
+}

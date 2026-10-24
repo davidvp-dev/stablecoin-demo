@@ -1,0 +1,10 @@
+{
+  // Solo afecta a la raíz "root" del workspace: oculta los subproyectos
+  // aquí porque ya aparecen como raíces propias (evita verlos duplicados).
+  "files.exclude": {
+    "contracts": true,
+    "core-api": true,
+    "chain-service": true,
+    "portal": true
+  }
+}
