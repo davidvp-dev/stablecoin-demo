@@ -1,4 +1,2 @@
-out/
-cache/
-broadcast/
 .env
+.DS_Store
