@@ -2,24 +2,23 @@
 name: stablecoin-demo
 
 services:
-
   # ─────────────────────────────────────────────
   # PostgreSQL: base de datos de core-api y chain-service
   # ─────────────────────────────────────────────
   postgres:
-    image: postgres:17-alpine          # qué programa descargar (imagen oficial, versión fija)
-    container_name: sd-postgres        # nombre del contenedor en Docker Desktop
-    restart: unless-stopped            # si Docker se reinicia, vuelve a levantarlo
-    environment:                       # configuración que la imagen lee al arrancar
-      POSTGRES_USER: ${POSTGRES_USER}          # valores leídos del fichero .env
+    image: postgres:17-alpine # qué programa descargar (imagen oficial, versión fija)
+    container_name: sd-postgres # nombre del contenedor en Docker Desktop
+    restart: unless-stopped # si Docker se reinicia, vuelve a levantarlo
+    environment: # configuración que la imagen lee al arrancar
+      POSTGRES_USER: ${POSTGRES_USER} # valores leídos del fichero .env
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: postgres
     ports:
-      - "5433:5432"                    # tu Mac:5433  →  contenedor:5432
+      - "5433:5432" # tu Mac:5433  →  contenedor:5432
     volumes:
-      - pgdata:/var/lib/postgresql/data                       # datos persistentes
-      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro  # SQL que se ejecuta la 1ª vez
-    healthcheck:                       # cómo sabe Docker que Postgres está "sano"
+      - pgdata:/var/lib/postgresql/data # datos persistentes
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro # SQL que se ejecuta la 1ª vez
+    healthcheck: # cómo sabe Docker que Postgres está "sano"
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d postgres"]
       interval: 5s
       timeout: 3s
@@ -30,11 +29,11 @@ services:
   # Modo KRaft (sin ZooKeeper): un solo nodo hace de broker y de controller
   # ─────────────────────────────────────────────
   kafka:
-    image: apache/kafka:4.1.0          # imagen oficial de Apache, versión fija
+    image: apache/kafka:4.1.0 # imagen oficial de Apache, versión fija
     container_name: sd-kafka
     restart: unless-stopped
     ports:
-      - "9092:9092"                    # solo se expone la "puerta" para tu Mac
+      - "9092:9092" # solo se expone la "puerta" para tu Mac
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -62,7 +61,11 @@ services:
       # Los topics se crean de forma explícita (evita topics "fantasma" por erratas)
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list",
+        ]
       interval: 10s
       timeout: 10s
       retries: 10
@@ -73,21 +76,46 @@ services:
   # http://localhost:8090
   # ─────────────────────────────────────────────
   kafka-ui:
-    image: ghcr.io/kafbat/kafka-ui:latest   # fork mantenido de provectus/kafka-ui
-                                            # (cuando funcione, fíjala a la versión que muestra la UI)
+    image:
+      ghcr.io/kafbat/kafka-ui:latest # fork mantenido de provectus/kafka-ui
+      # (cuando funcione, fíjala a la versión que muestra la UI)
     container_name: sd-kafka-ui
     restart: unless-stopped
     ports:
-      - "8090:8080"                    # 8090 en tu Mac para no chocar con Spring Boot (8080)
+      - "8090:8080" # 8090 en tu Mac para no chocar con Spring Boot (8080)
     environment:
       KAFKA_CLUSTERS_0_NAME: stablecoin-local
       # Kafka UI vive DENTRO de Docker: usa el listener INTERNAL, no localhost
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-      DYNAMIC_CONFIG_ENABLED: "true"   # permite añadir/editar clusters desde la web
+      DYNAMIC_CONFIG_ENABLED: "true" # permite añadir/editar clusters desde la web
     depends_on:
       kafka:
-        condition: service_healthy     # no arranca hasta que Kafka esté "healthy"
+        condition: service_healthy # no arranca hasta que Kafka esté "healthy"
 
+  # ─────────────────────────────────────────────
+  # Anvil: blockchain Ethereum local (Foundry)
+  # RPC en http://localhost:8545
+  # ─────────────────────────────────────────────
+  anvil:
+    image:
+      ghcr.io/foundry-rs/foundry:stable # imagen oficial de Foundry
+      # (cuando funcione, fíjala a una versión, p. ej. v1.x.x)
+    container_name: sd-anvil
+    restart: unless-stopped
+    entrypoint: ["anvil"] # la imagen trae forge, cast y anvil: arrancamos anvil
+    command:
+      - --host=0.0.0.0 # escuchar fuera del contenedor (si no, tu Mac no llega)
+      - --port=8545
+      - --chain-id=31337 # el chain id estándar de Anvil, explícito
+      - --block-time=1 # un bloque por segundo, como una red "real"
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test:
+        ["CMD", "cast", "block-number", "--rpc-url", "http://localhost:8545"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 # Discos persistentes gestionados por Docker
 volumes:
   pgdata:
