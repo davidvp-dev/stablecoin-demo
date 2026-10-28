@@ -32,9 +32,9 @@ contract EURDemo is ERC20, AccessControl, Pausable {
         _grantRole(PAUSER_ROLE, msg.sender);
     }
 
-    event TokensEmited(address indexed to, uint256 amount, bytes32 orderId);
-    event TokensRedeemed(address indexed to, uint256 amount, bytes32 orderId);
-    event BlacklistStatusChanged(address indexed user, bool isBlacklisted);
+    event TokensEmitted(address indexed to, uint256 amount, bytes32 orderId);
+    event TokensRedeemed(address indexed account, uint256 amount, bytes32 orderId);
+    event BlacklistStatusChanged(address indexed account, bool isBlacklisted);
     event PausedContract();
     event UnpausedContract();
 
