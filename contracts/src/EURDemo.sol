@@ -24,7 +24,7 @@ contract EURDemo is ERC20, AccessControl, Pausable {
 
     mapping(address => bool) public isBlacklisted;
     mapping(bytes32 => bool) public isMintOrderSubmitted;
-    mapping(bytes32 => bool) public isRedeemOrderSubmitted;
+    mapping(address => mapping(bytes32 => bool)) isRedeemOrderSubmitted;
 
     constructor(address minterRoleAddress_) ERC20("EUR Demo", "EURD") {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -50,21 +50,22 @@ contract EURDemo is ERC20, AccessControl, Pausable {
         if (isBlacklisted[to_]) revert UserBlacklisted();
         if (isMintOrderSubmitted[orderId_]) revert MintOrderAlreadySubmitted(orderId_);
 
+        isMintOrderSubmitted[orderId_] = true;
         _mint(to_, amount_);
-        emit TokensEmited(to_, amount_, orderId_);
+        emit TokensEmitted(to_, amount_, orderId_);
     }
 
     /**
      * @dev This function allows the user to redeem tokens when the contract is not paused.
      * @param amount_ amount of tokens to redeem
-     * @param orderId_ order id that must be unique
+     * @param orderId_ order id that must be unique per address
      */
     function redeem(uint256 amount_, bytes32 orderId_) external whenNotPaused {
-        if (msg.sender == address(0)) revert ZeroAddress();
         if (amount_ == 0) revert ZeroAmount();
         if (isBlacklisted[msg.sender]) revert UserBlacklisted();
-        if (isRedeemOrderSubmitted[orderId_]) revert RedeemOrderAlreadySubmitted(orderId_);
+        if (isRedeemOrderSubmitted[msg.sender][orderId_]) revert RedeemOrderAlreadySubmitted(orderId_);
 
+        isRedeemOrderSubmitted[msg.sender][orderId_] = true;
         _burn(msg.sender, amount_);
         emit TokensRedeemed(msg.sender, amount_, orderId_);
     }
