@@ -19,8 +19,8 @@ error UserBlacklisted();
  */
 contract EURDemo is ERC20, AccessControl, Pausable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE"); // belongs to chain service
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    uint8 public constant EURD_DECIMALS = 6;
 
     mapping(address => bool) public isBlacklisted;
     mapping(bytes32 => bool) public isMintOrderSubmitted;
@@ -80,7 +80,7 @@ contract EURDemo is ERC20, AccessControl, Pausable {
     /**
      * @dev Unpause the transfers, mint and redeem functions.
      */
-    function unpause() external onlyRole(ADMIN_ROLE) {
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
         emit UnpausedContract();
     }
@@ -89,7 +89,7 @@ contract EURDemo is ERC20, AccessControl, Pausable {
      * @dev Function that allows the admin to blacklist a user address
      * @param user_ address to be blacklisted
      */
-    function blacklist(address user_) external onlyRole(ADMIN_ROLE) {
+    function blacklist(address user_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (user_ == address(0)) revert ZeroAddress();
         isBlacklisted[user_] = true;
         emit BlacklistStatusChanged(user_, true);
@@ -99,9 +99,29 @@ contract EURDemo is ERC20, AccessControl, Pausable {
      * @dev Function that allows the admin to remove a user from the blacklist
      * @param user_ address to be removed from blacklist
      */
-    function removeFromBlacklist(address user_) external onlyRole(ADMIN_ROLE) {
+    function removeFromBlacklist(address user_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (user_ == address(0)) revert ZeroAddress();
         isBlacklisted[user_] = false;
         emit BlacklistStatusChanged(user_, false);
+    }
+
+    /**
+     * @dev Override token decimals to 6 instead of 18
+     */
+    function decimals() public pure override returns (uint8) {
+        return EURD_DECIMALS;
+    }
+
+    /**
+     * @dev Transfers a `value` amount of tokens from `from` to `to`, or alternatively mints (or burns) if `from`
+     * (or `to`) is the zero address. If any address 'from' or 'to' is blacklisted or the contract is paused, the transaction reverts.
+     * This applies for mint, burn, transfer, transferFrom functions.
+     * @param from  origin address
+     * @param to destination address
+     * @param value amount of tokens
+     */
+    function _update(address from, address to, uint256 value) internal override whenNotPaused {
+        if (isBlacklisted[from] || isBlacklisted[to]) revert UserBlacklisted();
+        super._update(from, to, value);
     }
 }
