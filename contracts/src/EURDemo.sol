@@ -24,13 +24,7 @@ contract EURDemo is ERC20, AccessControl, Pausable {
 
     mapping(address => bool) public isBlacklisted;
     mapping(bytes32 => bool) public isMintOrderSubmitted;
-    mapping(address => mapping(bytes32 => bool)) isRedeemOrderSubmitted;
-
-    constructor(address minterRoleAddress_) ERC20("EUR Demo", "EURD") {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(MINTER_ROLE, minterRoleAddress_);
-        _grantRole(PAUSER_ROLE, msg.sender);
-    }
+    mapping(address => mapping(bytes32 => bool)) public isRedeemOrderSubmitted;
 
     event TokensEmitted(address indexed to, uint256 amount, bytes32 orderId);
     event TokensRedeemed(address indexed account, uint256 amount, bytes32 orderId);
@@ -38,11 +32,17 @@ contract EURDemo is ERC20, AccessControl, Pausable {
     event PausedContract();
     event UnpausedContract();
 
+    constructor(address minterRoleAddress_) ERC20("EUR Demo", "EURD") {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(MINTER_ROLE, minterRoleAddress_);
+        _grantRole(PAUSER_ROLE, msg.sender);
+    }
+
     /**
      * @dev This function mints tokens only allowed by an allowed minter and when the contract is not paused.
      * @param to_ user receiving the tokens
      * @param amount_ amount of tokens
-     * @param orderId_ order id that must be unique
+     * @param orderId_ order id that must be unique across all mints
      */
     function mint(address to_, uint256 amount_, bytes32 orderId_) external onlyRole(MINTER_ROLE) whenNotPaused {
         if (to_ == address(0)) revert ZeroAddress();
