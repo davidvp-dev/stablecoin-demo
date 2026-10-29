@@ -22,6 +22,8 @@ paths:
   /wallets/challenge:
     post:
       summary: Generate a challenge for a wallet
+      description: |
+        This endpoint generates a challenge for a wallet. The challenge includes a message, nonce, and timestamp, internal domain and chainId and is used to verify the ownership of the wallet. The challenge is unique for each request
       operationId: generateWalletChallenge
       tags:
         - wallets
@@ -347,15 +349,14 @@ components:
               description: Human-readable explanation of the error
     WalletChallengeRequest:
       type: object
+      required:
+        - walletAddress
       properties:
         walletAddress:
           type: string
           description: The address of the wallet for which to generate a challenge
           example: "0x1234567890abcdef1234567890abcdef12345678"
-        status:
-          type: string
-          description: The status of the wallet (e.g., pending, verified)
-          example: "VERIFIED"
+          pattern: "^0x[a-fA-F0-9]{40}$"
     WalletChallengeResponse:
       type: object
       properties:
@@ -366,34 +367,86 @@ components:
             message:
               type: string
               description: The challenge message that the wallet needs to sign
+              example: "Please sign this message to verify your wallet ownership."
+            nonce:
+              type: string
+              description: A unique nonce associated with the challenge to prevent replay attacks
+              example: "a1b2c3d4e5f6g7h8i9j0"
+            issuedAt:
+              type: string
+              format: date-time
+              description: The timestamp when the challenge was issued
+              example: "2024-06-01T12:00:00Z"
+            expiresAt:
+              type: string
+              format: date-time
+              description: The timestamp when the challenge will expire
+              example: "2024-06-01T12:05:00Z"
     WalletVerificationRequest:
       type: object
+      required:
+        - walletAddress
+        - nonce
+        - signature
       properties:
         walletAddress:
           type: string
           description: The address of the wallet to verify
-        challenge:
+        nonce:
           type: string
-          description: The challenge that was generated for the wallet
+          description: The nonce that was provided in the challenge to ensure the signature is valid for this specific challenge
+          example: "a1b2c3d4e5f6g7h8i9j0"
         signature:
           type: string
           description: The signature provided by the wallet for verification
+          pattern: "^0x[a-fA-F0-9]{130}$"
+          example: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef"
     WalletVerificationResponse:
       type: object
       properties:
-        verified:
-          type: boolean
-          description: Indicates whether the signature is valid for the given challenge and wallet address
+        walletAddress:
+          type: string
+          description: The address of the wallet that was verified
+          example: "0x1234567890abcdef1234567890abcdef12345678"
+        status:
+          type: string
+          format: enum
+            - VERIFIED
+            - FAILED
+          description: The result of the verification process (e.g., verified, failed)
+          example: "VERIFIED"
+        verifiedAt:
+          type: string
+          format: date-time
+          description: The timestamp when the wallet was successfully verified
+          example: "2024-06-01T12:01:00Z"
     Wallet:
       type: object
       properties:
         walletAddress:
           type: string
           description: The address of the wallet
+          example: "0x1234567890abcdef1234567890abcdef12345678"
         balance:
-          type: number
-          format: float
+          type: string
           description: The current balance of the wallet
+          example: "1000.50"
+        status:
+          type: string
+          format: enum
+            - VERIFIED
+            - UNVERIFIED
+          description: The status of the wallet
+        createdAt:
+          type: string
+          format: date-time
+          description: The timestamp when the wallet was created
+          example: "2024-06-01T12:00:00Z"
+        verifiedAt:
+          type: string
+          format: date-time
+          description: The timestamp when the wallet was verified (if applicable)
+          example: "2024-06-01T12:01:00Z"
         transactions:
           type: array
           items:
@@ -404,86 +457,111 @@ components:
         transactionId:
           type: string
           description: The unique identifier of the transaction
+          example: "0x1234567890abcdef1234567890abcdef12345678"
         amount:
-          type: number
-          format: float
+          type: string
           description: The amount involved in the transaction
+          example: "100.00"
         timestamp:
           type: string
           format: date-time
           description: The timestamp when the transaction occurred
+          example: "2024-06-01T12:00:00Z"
     WalletAmountRequest:
       type: object
       properties:
         walletAddress:
           type: string
           description: The wallet address associated with the requested amount
+          example: "0x1234567890abcdef1234567890abcdef12345678"
         amount:
-          type: number
-          format: float
+          type: string
           description: The amount to process
+          example: "100.00"
     CreatedOrderResponse:
       type: object
       properties:
         orderId:
           type: string
           description: The unique identifier of the created order
+          example: "0x1234567890abcdef1234567890abcdef12345678"
         status:
           type: string
+          format: enum
+            - PENDING
+            - COMPLETED
+            - FAILED
           description: The status of the order (e.g., pending, completed)
+          example: "PENDING"
     OrderDetails:
       type: object
       properties:
         orderId:
           type: string
           description: The unique identifier of the order
+          example: "0x1234567890abcdef1234567890abcdef12345678"
         walletAddress:
           type: string
           description: The address of the wallet that created the order
+          example: "0x1234567890abcdef1234567890abcdef12345678"
         amount:
-          type: number
-          format: float
+          type: string
           description: The amount involved in the order
+          example: "100.00"
         status:
           type: string
+          format: enum
+            - PENDING
+            - COMPLETED
+            - FAILED
           description: The status of the order (e.g., pending, completed)
+          example: "PENDING"
     IncomingTransferResponse:
       type: object
       properties:
         transactionId:
           type: string
           description: The unique identifier of the simulated incoming transfer transaction
+          example: "0x1234567890abcdef1234567890abcdef12345678"
     OrderSummary:
       type: object
       properties:
         orderId:
           type: string
           description: The unique identifier of the order
+          example: "0x1234567890abcdef1234567890abcdef12345678"
         type:
           type: string
           description: The type of the order (mint or redeem)
+          example: "MINT"
         walletAddress:
           type: string
           description: The address of the wallet that created the order
+          example: "0x1234567890abcdef1234567890abcdef12345678"
         amount:
-          type: number
-          format: float
+          type: string
           description: The amount involved in the order
+          example: "100.00"
         status:
           type: string
+          format: enum
+            - PENDING
+            - COMPLETED
+            - FAILED
           description: The status of the order (e.g., pending, completed)
+          example: "PENDING"
     ReconciliationSummary:
       type: object
       properties:
         totalMinted:
-          type: number
-          format: float
+          type: string
           description: The total amount minted during the specified period
+          example: "1000.00"
         totalRedeemed:
-          type: number
-          format: float
+          type: string
           description: The total amount redeemed during the specified period
+          example: "500.00"
         netChange:
-          type: number
-          format: float
+          type: string
           description: The net change in balance (total minted - total redeemed) during the specified period
+          example: "500.00"
