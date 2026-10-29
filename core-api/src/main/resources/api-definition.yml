@@ -1,0 +1,489 @@
+openapi: "3.0.3"
+info:
+  title: Core API
+  version: "1.0.0"
+  description: API for interacting with the core functionalities of the stablecoin system, including wallet management, minting, redeeming, and reconciliation.
+servers:
+  - url: /core-api/v1/
+tags:
+  - name: wallets
+    description: Wallet operations
+  - name: mints
+    description: Mint order operations
+  - name: redeems
+    description: Redeem order operations
+  - name: orders
+    description: Operations for querying and streaming orders
+  - name: bank-sim
+    description: Simulated bank operations
+  - name: reconciliation
+    description: Reconciliation operations
+paths:
+  /wallets/challenge:
+    post:
+      summary: Generate a challenge for a wallet
+      operationId: generateWalletChallenge
+      tags:
+        - wallets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WalletChallengeRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletChallengeResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /wallets/verify:
+    post:
+      summary: Verify a wallet's signature against a challenge
+      operationId: verifyWalletSignature
+      tags:
+        - wallets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WalletVerificationRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletVerificationResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /wallets/{address}:
+    get:
+      summary: Retrieve wallet information by address
+      operationId: getWalletInfo
+      tags:
+        - wallets
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The address of the wallet to retrieve information for
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wallet"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /mint-orders:
+    post:
+      summary: Create a new mint order
+      operationId: createMintOrders
+      tags:
+        - mints
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: A unique key to ensure idempotency of the request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WalletAmountRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedOrderResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /mint-orders/{id}:
+    get:
+      summary: Retrieve a mint order by ID
+      operationId: getMintOrderById
+      tags:
+        - mints
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The unique identifier of the mint order to retrieve
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetails"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /bank-sim/incoming:
+    post:
+      summary: Simulate an incoming bank transfer
+      operationId: simulateIncomingBankTransfer
+      tags:
+        - bank-sim
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WalletAmountRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncomingTransferResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /redeem-orders:
+    post:
+      summary: Create a new redeem order
+      operationId: createRedeemOrder
+      tags:
+        - redeems
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: A unique key to ensure idempotency of the request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WalletAmountRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedOrderResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /redeem-orders/{id}:
+    get:
+      summary: Retrieve a redeem order by ID
+      operationId: getRedeemOrderById
+      tags:
+        - redeems
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The unique identifier of the redeem order to retrieve
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetails"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /orders:
+    get:
+      summary: Retrieve all orders (mint and redeem)
+      operationId: getAllOrders
+      tags:
+        - orders
+      parameters:
+        - name: walletAddress
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional wallet address to filter orders by
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrderSummary"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /orders/stream:
+    get:
+      summary: Stream all orders (mint and redeem) in real-time
+      operationId: streamAllOrders
+      tags:
+        - orders
+      parameters:
+        - name: walletAddress
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional wallet address to filter streamed orders by
+      responses:
+        "200":
+          description: OK
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/OrderSummary"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /reconciliation:
+    get:
+      summary: Retrieve reconciliation data
+      operationId: getReconciliationData
+      tags:
+        - reconciliation
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: The start date for the reconciliation data (YYYY-MM-DD)
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: The end date for the reconciliation data (YYYY-MM-DD)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationSummary"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - errors
+      properties:
+        errors:
+          type: object
+          required:
+            - reasonCode
+            - description
+          properties:
+            reasonCode:
+              type: string
+              example: RFC9457
+              description: Code identifying the reason for the error
+            description:
+              type: string
+              example: Invalid wallet address
+              description: Human-readable explanation of the error
+    WalletChallengeRequest:
+      type: object
+      properties:
+        walletAddress:
+          type: string
+          description: The address of the wallet for which to generate a challenge
+          example: "0x1234567890abcdef1234567890abcdef12345678"
+        status:
+          type: string
+          description: The status of the wallet (e.g., pending, verified)
+          example: "VERIFIED"
+    WalletChallengeResponse:
+      type: object
+      properties:
+        challenge:
+          type: object
+          description: The generated challenge for the wallet
+          properties:
+            message:
+              type: string
+              description: The challenge message that the wallet needs to sign
+    WalletVerificationRequest:
+      type: object
+      properties:
+        walletAddress:
+          type: string
+          description: The address of the wallet to verify
+        challenge:
+          type: string
+          description: The challenge that was generated for the wallet
+        signature:
+          type: string
+          description: The signature provided by the wallet for verification
+    WalletVerificationResponse:
+      type: object
+      properties:
+        verified:
+          type: boolean
+          description: Indicates whether the signature is valid for the given challenge and wallet address
+    Wallet:
+      type: object
+      properties:
+        walletAddress:
+          type: string
+          description: The address of the wallet
+        balance:
+          type: number
+          format: float
+          description: The current balance of the wallet
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/WalletTransaction"
+    WalletTransaction:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          description: The unique identifier of the transaction
+        amount:
+          type: number
+          format: float
+          description: The amount involved in the transaction
+        timestamp:
+          type: string
+          format: date-time
+          description: The timestamp when the transaction occurred
+    WalletAmountRequest:
+      type: object
+      properties:
+        walletAddress:
+          type: string
+          description: The wallet address associated with the requested amount
+        amount:
+          type: number
+          format: float
+          description: The amount to process
+    CreatedOrderResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+          description: The unique identifier of the created order
+        status:
+          type: string
+          description: The status of the order (e.g., pending, completed)
+    OrderDetails:
+      type: object
+      properties:
+        orderId:
+          type: string
+          description: The unique identifier of the order
+        walletAddress:
+          type: string
+          description: The address of the wallet that created the order
+        amount:
+          type: number
+          format: float
+          description: The amount involved in the order
+        status:
+          type: string
+          description: The status of the order (e.g., pending, completed)
+    IncomingTransferResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          description: The unique identifier of the simulated incoming transfer transaction
+    OrderSummary:
+      type: object
+      properties:
+        orderId:
+          type: string
+          description: The unique identifier of the order
+        type:
+          type: string
+          description: The type of the order (mint or redeem)
+        walletAddress:
+          type: string
+          description: The address of the wallet that created the order
+        amount:
+          type: number
+          format: float
+          description: The amount involved in the order
+        status:
+          type: string
+          description: The status of the order (e.g., pending, completed)
+    ReconciliationSummary:
+      type: object
+      properties:
+        totalMinted:
+          type: number
+          format: float
+          description: The total amount minted during the specified period
+        totalRedeemed:
+          type: number
+          format: float
+          description: The total amount redeemed during the specified period
+        netChange:
+          type: number
+          format: float
+          description: The net change in balance (total minted - total redeemed) during the specified period
