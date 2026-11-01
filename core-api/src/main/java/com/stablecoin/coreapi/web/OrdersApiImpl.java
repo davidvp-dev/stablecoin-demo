@@ -2,11 +2,16 @@ package com.stablecoin.coreapi.web;
 
 import com.stablecoin.coreapi.generated.api.OrdersApi;
 import com.stablecoin.coreapi.generated.model.OrderSummary;
+import com.stablecoin.coreapi.generated.model.OrderType;
 import com.stablecoin.coreapi.service.OrdersService;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Order history. The SSE stream (GET /orders/stream) is not part of this interface: it will be a
+ * hand-written SseEmitter controller, because the generated OrdersStreamApi cannot return a stream.
+ */
 @RestController
 public class OrdersApiImpl implements OrdersApi {
 
@@ -17,12 +22,7 @@ public class OrdersApiImpl implements OrdersApi {
 	}
 
 	@Override
-	public ResponseEntity<List<OrderSummary>> getAllOrders(String walletAddress) {
-		return ResponseEntity.ok(ordersService.getAllOrders(walletAddress));
-	}
-
-	@Override
-	public ResponseEntity<OrderSummary> streamAllOrders(String walletAddress) {
-		return ResponseEntity.ok(ordersService.streamAllOrders(walletAddress));
+	public ResponseEntity<List<OrderSummary>> listOrders(String wallet, OrderType type, String status) {
+		return ResponseEntity.ok(ordersService.listOrders(wallet, type, status));
 	}
 }

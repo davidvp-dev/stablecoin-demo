@@ -1,9 +1,10 @@
 package com.stablecoin.coreapi.web;
 
 import com.stablecoin.coreapi.generated.api.BankSimApi;
-import com.stablecoin.coreapi.generated.model.IncomingTransferResponse;
-import com.stablecoin.coreapi.generated.model.WalletAmountRequest;
+import com.stablecoin.coreapi.generated.model.BankTransfer;
+import com.stablecoin.coreapi.generated.model.IncomingTransferRequest;
 import com.stablecoin.coreapi.service.BankSimService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -17,8 +18,8 @@ public class BankSimApiImpl implements BankSimApi {
 	}
 
 	@Override
-	public ResponseEntity<IncomingTransferResponse> simulateIncomingBankTransfer(
-			WalletAmountRequest walletAmountRequest) {
-		return ResponseEntity.ok(bankSimService.simulateIncomingBankTransfer(walletAmountRequest));
+	public ResponseEntity<BankTransfer> createIncomingTransfer(IncomingTransferRequest incomingTransferRequest) {
+		return ResponseEntity.status(HttpStatus.CREATED)
+				.body(bankSimService.registerIncomingTransfer(incomingTransferRequest));
 	}
 }

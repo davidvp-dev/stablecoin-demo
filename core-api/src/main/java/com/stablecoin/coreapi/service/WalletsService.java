@@ -1,11 +1,9 @@
 package com.stablecoin.coreapi.service;
 
 import com.stablecoin.coreapi.generated.model.Wallet;
+import com.stablecoin.coreapi.generated.model.WalletChallenge;
 import com.stablecoin.coreapi.generated.model.WalletChallengeRequest;
-import com.stablecoin.coreapi.generated.model.WalletChallengeResponse;
-import com.stablecoin.coreapi.generated.model.WalletChallengeResponseChallenge;
 import com.stablecoin.coreapi.generated.model.WalletVerificationRequest;
-import com.stablecoin.coreapi.generated.model.WalletVerificationResponse;
 import com.stablecoin.coreapi.infra.repository.PostgresWalletChallengeRepository;
 import com.stablecoin.coreapi.util.Constants;
 
@@ -14,10 +12,12 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.Locale;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.web3j.crypto.Keys;
 
@@ -46,40 +46,42 @@ public class WalletsService {
 		this.walletChallengeRepository = walletChallengeRepository;
 	}
 
-	public WalletChallengeResponse generateWalletChallenge(WalletChallengeRequest request) {
-		WalletChallengeResponseChallenge challenge = new WalletChallengeResponseChallenge();
-		WalletChallengeResponse response = new WalletChallengeResponse();
-
+	@Transactional
+	public WalletChallenge generateWalletChallenge(WalletChallengeRequest request) {
 		// Calculate the checksum address and generate a nonce
 		String checksumAddress = validateAndChecksumWalletAddress(request.getWalletAddress());
+		String storedAddress = checksumAddress.toLowerCase(Locale.ROOT);
 		String nonce = new BigInteger(130, secureRandom).toString(32);
 		Instant issuedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
 		Instant expiresAt = issuedAt.plusSeconds(challengeExpirationSeconds);
+		String message = generateMessage(checksumAddress, nonce, issuedAt, expiresAt);
 
-		// Insert the nonce and wallet address into the database for later
-		walletChallengeRepository.insertIntoWalletChallenges(nonce, checksumAddress.toLowerCase(),
-				generateMessage(request, checksumAddress, nonce, issuedAt, expiresAt),
+		// Store the challenge for later verification (the wallet starts as PENDING)
+		walletChallengeRepository.insertPendingWalletIfAbsent(storedAddress);
+		walletChallengeRepository.insertIntoWalletChallenges(nonce, storedAddress, message,
 				expiresAt.atOffset(ZoneOffset.UTC));
 
 		// Map the response fields
-		challenge.setMessage(generateMessage(request, checksumAddress, nonce, issuedAt, expiresAt));
+		WalletChallenge challenge = new WalletChallenge();
+		challenge.setMessage(message);
 		challenge.setNonce(nonce);
 		challenge.setIssuedAt(issuedAt.atOffset(ZoneOffset.UTC));
 		challenge.setExpiresAt(expiresAt.atOffset(ZoneOffset.UTC));
-		response.setChallenge(challenge);
-		return response;
+		return challenge;
 	}
 
 	private String validateAndChecksumWalletAddress(String address) {
 		if (address == null || address.isEmpty()) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Wallet address is required");
 		}
-		return Keys.toChecksumAddress(address); // Validate Ethereum address format
+		try {
+			return Keys.toChecksumAddress(address); // Validate Ethereum address format
+		} catch (RuntimeException e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Ethereum wallet address");
+		}
 	}
 
-	private String generateMessage(WalletChallengeRequest request, String address, String nonce, Instant issuedAt,
-			Instant expiresAt) {
-
+	private String generateMessage(String address, String nonce, Instant issuedAt, Instant expiresAt) {
 		String message = Constants.SIWE_MESSAGE_TEMPLATE
 				.replace("{domain}", domain)
 				.replace("{address}", address)
@@ -97,11 +99,11 @@ public class WalletsService {
 		return message;
 	}
 
-	public Wallet getWalletInfo(String address) {
+	public Wallet getWallet(String address) {
 		throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Wallet lookup is not implemented");
 	}
 
-	public WalletVerificationResponse verifyWalletSignature(WalletVerificationRequest request) {
+	public Wallet verifyWalletSignature(WalletVerificationRequest request) {
 		throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
 				"Wallet signature verification is not implemented");
 	}

@@ -1,9 +1,7 @@
 package com.stablecoin.coreapi.infra.repository;
 
 import com.stablecoin.coreapi.util.Constants;
-
 import java.time.OffsetDateTime;
-
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -14,6 +12,13 @@ public class PostgresWalletChallengeRepository {
 
     public PostgresWalletChallengeRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
+    }
+
+    /** Creates the wallet as PENDING if it does not exist yet (challenges reference wallets). */
+    public void insertPendingWalletIfAbsent(String walletAddress) {
+        jdbc.sql(Constants.UPSERT_PENDING_WALLET_QUERY)
+                .param("walletAddress", walletAddress)
+                .update();
     }
 
     public void insertIntoWalletChallenges(String nonce, String walletAddress, String message,
