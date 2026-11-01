@@ -1,10 +1,11 @@
 import { createConfig, http } from 'wagmi'
-import { mainnet, sepolia } from 'wagmi/chains'
+import { anvil, sepolia } from 'wagmi/chains'
 
+// Anvil (31337) for local development, Sepolia for the demo (RF-UI-02)
 export const config = createConfig({
-  chains: [mainnet, sepolia],
+  chains: [anvil, sepolia],
   transports: {
-    [mainnet.id]: http(),
+    [anvil.id]: http(),
     [sepolia.id]: http(),
   },
 })
