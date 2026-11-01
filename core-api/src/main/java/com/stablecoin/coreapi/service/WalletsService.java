@@ -6,6 +6,7 @@ import com.stablecoin.coreapi.generated.model.WalletChallengeResponse;
 import com.stablecoin.coreapi.generated.model.WalletChallengeResponseChallenge;
 import com.stablecoin.coreapi.generated.model.WalletVerificationRequest;
 import com.stablecoin.coreapi.generated.model.WalletVerificationResponse;
+import com.stablecoin.coreapi.infra.repository.PostgresWalletChallengeRepository;
 import com.stablecoin.coreapi.util.Constants;
 
 import java.math.BigInteger;
@@ -39,19 +40,28 @@ public class WalletsService {
 	public int challengeExpirationSeconds;
 
 	private static final SecureRandom secureRandom = new SecureRandom();
+	private final PostgresWalletChallengeRepository walletChallengeRepository;
+
+	public WalletsService(PostgresWalletChallengeRepository walletChallengeRepository) {
+		this.walletChallengeRepository = walletChallengeRepository;
+	}
 
 	public WalletChallengeResponse generateWalletChallenge(WalletChallengeRequest request) {
 		WalletChallengeResponseChallenge challenge = new WalletChallengeResponseChallenge();
 		WalletChallengeResponse response = new WalletChallengeResponse();
 
-		String checksumAddress = validateWalletAddress(request.getWalletAddress());
+		// Calculate the checksum address and generate a nonce
+		String checksumAddress = validateAndChecksumWalletAddress(request.getWalletAddress());
 		String nonce = new BigInteger(130, secureRandom).toString(32);
 		Instant issuedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
 		Instant expiresAt = issuedAt.plusSeconds(challengeExpirationSeconds);
 
-		// TO-DO: Insert the nonce and wallet address into the database for later
-		// verification
+		// Insert the nonce and wallet address into the database for later
+		walletChallengeRepository.insertIntoWalletChallenges(nonce, checksumAddress.toLowerCase(),
+				generateMessage(request, checksumAddress, nonce, issuedAt, expiresAt),
+				expiresAt.atOffset(ZoneOffset.UTC));
 
+		// Map the response fields
 		challenge.setMessage(generateMessage(request, checksumAddress, nonce, issuedAt, expiresAt));
 		challenge.setNonce(nonce);
 		challenge.setIssuedAt(issuedAt.atOffset(ZoneOffset.UTC));
@@ -60,16 +70,11 @@ public class WalletsService {
 		return response;
 	}
 
-	private String validateWalletAddress(String address) {
+	private String validateAndChecksumWalletAddress(String address) {
 		if (address == null || address.isEmpty()) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Wallet address is required");
 		}
-		try {
-			Keys.toChecksumAddress(address); // Validate Ethereum address format
-		} catch (IllegalArgumentException e) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Ethereum wallet address");
-		}
-		return address;
+		return Keys.toChecksumAddress(address); // Validate Ethereum address format
 	}
 
 	private String generateMessage(WalletChallengeRequest request, String address, String nonce, Instant issuedAt,
