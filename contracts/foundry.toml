@@ -6,6 +6,11 @@ evm_version = "prague"
 optimizer = true
 optimizer_runs = 200
 
+# RPC URLs come from .env (contracts/.env is a symlink to the root .env)
 [rpc_endpoints]
-anvil = "http://localhost:8545"
-sepolia = "https://ethereum-sepolia-rpc.publicnode.com"
+anvil = "${RPC_URL_ANVIL}"
+sepolia = "${RPC_URL_SEPOLIA}"
+
+# Used by --verify
+[etherscan]
+sepolia = { key = "${ETHERSCAN_API_KEY}", chain = 11155111 }

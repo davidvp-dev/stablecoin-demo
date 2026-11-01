@@ -10,7 +10,7 @@ error ZeroAmount();
 error ZeroAddress();
 error MintOrderAlreadySubmitted(bytes32);
 error RedeemOrderAlreadySubmitted(bytes32);
-error UserBlacklisted();
+error UserBlacklisted(address);
 
 /**
  * @title EUR Demo Stablecoin Contract
@@ -20,6 +20,7 @@ error UserBlacklisted();
 contract EURDemo is ERC20, AccessControl, Pausable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE"); // belongs to chain service
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
     uint8 public constant EURD_DECIMALS = 6;
 
     mapping(address => bool) public isBlacklisted;
@@ -29,13 +30,14 @@ contract EURDemo is ERC20, AccessControl, Pausable {
     event TokensEmitted(address indexed to, uint256 amount, bytes32 orderId);
     event TokensRedeemed(address indexed account, uint256 amount, bytes32 orderId);
     event BlacklistStatusChanged(address indexed account, bool isBlacklisted);
-    event PausedContract();
-    event UnpausedContract();
 
-    constructor(address minterRoleAddress_) ERC20("EUR Demo", "EURD") {
+    constructor(address minterRoleAddress_, address pauserRoleAddress_, address blacklisterRoleAddress_)
+        ERC20("Euro Demo", "EURD")
+    {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, minterRoleAddress_);
-        _grantRole(PAUSER_ROLE, msg.sender);
+        _grantRole(PAUSER_ROLE, pauserRoleAddress_);
+        _grantRole(BLACKLISTER_ROLE, blacklisterRoleAddress_);
     }
 
     /**
@@ -47,7 +49,7 @@ contract EURDemo is ERC20, AccessControl, Pausable {
     function mint(address to_, uint256 amount_, bytes32 orderId_) external onlyRole(MINTER_ROLE) whenNotPaused {
         if (to_ == address(0)) revert ZeroAddress();
         if (amount_ == 0) revert ZeroAmount();
-        if (isBlacklisted[to_]) revert UserBlacklisted();
+        if (isBlacklisted[to_]) revert UserBlacklisted(to_);
         if (isMintOrderSubmitted[orderId_]) revert MintOrderAlreadySubmitted(orderId_);
 
         isMintOrderSubmitted[orderId_] = true;
@@ -62,7 +64,7 @@ contract EURDemo is ERC20, AccessControl, Pausable {
      */
     function redeem(uint256 amount_, bytes32 orderId_) external whenNotPaused {
         if (amount_ == 0) revert ZeroAmount();
-        if (isBlacklisted[msg.sender]) revert UserBlacklisted();
+        if (isBlacklisted[msg.sender]) revert UserBlacklisted(msg.sender);
         if (isRedeemOrderSubmitted[msg.sender][orderId_]) revert RedeemOrderAlreadySubmitted(orderId_);
 
         isRedeemOrderSubmitted[msg.sender][orderId_] = true;
@@ -71,26 +73,24 @@ contract EURDemo is ERC20, AccessControl, Pausable {
     }
 
     /**
-     * @dev Emergency pause to transfers, mint and redeem functions.
+     * @dev Emergency pause to transfers, mint and redeem functions. Only available for PAUSER_ROLE
      */
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
-        emit PausedContract();
     }
 
     /**
-     * @dev Unpause the transfers, mint and redeem functions.
+     * @dev Unpause the transfers, mint and redeem functions. Only available for PAUSER_ROLE
      */
-    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
-        emit UnpausedContract();
     }
 
     /**
      * @dev Function that allows the admin to blacklist a user address
      * @param user_ address to be blacklisted
      */
-    function blacklist(address user_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function blacklist(address user_) external onlyRole(BLACKLISTER_ROLE) {
         if (user_ == address(0)) revert ZeroAddress();
         isBlacklisted[user_] = true;
         emit BlacklistStatusChanged(user_, true);
@@ -100,7 +100,7 @@ contract EURDemo is ERC20, AccessControl, Pausable {
      * @dev Function that allows the admin to remove a user from the blacklist
      * @param user_ address to be removed from blacklist
      */
-    function removeFromBlacklist(address user_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function removeFromBlacklist(address user_) external onlyRole(BLACKLISTER_ROLE) {
         if (user_ == address(0)) revert ZeroAddress();
         isBlacklisted[user_] = false;
         emit BlacklistStatusChanged(user_, false);
@@ -122,7 +122,8 @@ contract EURDemo is ERC20, AccessControl, Pausable {
      * @param value amount of tokens
      */
     function _update(address from, address to, uint256 value) internal override whenNotPaused {
-        if (isBlacklisted[from] || isBlacklisted[to]) revert UserBlacklisted();
+        if (isBlacklisted[from]) revert UserBlacklisted(from);
+        if (isBlacklisted[to]) revert UserBlacklisted(to);
         super._update(from, to, value);
     }
 }
