@@ -14,9 +14,15 @@ The project copies, at a small scale, how a real e-money token issuer works:
 ### End-to-end flow
 
 1. **Wallet verification:** the portal requests a SIWE challenge from `core-api`, the user signs it, and the verified address is whitelisted.
-2. **Mint:** the user creates a mint order, the simulated bank receives the SEPA transfer, `core-api` sends an event to `chain-service`, and `chain-service` calls `mint()` on the contract. The `TokensEmitted` event confirms the order (`PENDING → PAID → SUBMITTED → CONFIRMED`).
+2. **Mint:** the user creates a mint order, the simulated bank receives the SEPA transfer, `core-api` sends an event to `chain-service`, and `chain-service` calls `mint()` on the contract. The `TokensEmitted` event confirms the order (`CREATED → PAID → APPROVED → SUBMITTED → COMPLETED`).
 3. **Redeem:** the user calls `redeem()` on-chain, `chain-service` picks up the `TokensRedeemed` event, and `core-api` sends the payout from the simulated bank.
 4. **Accounting:** every movement is recorded in an append-only double-entry ledger, and `/reconciliation` compares the bank, the ledger and the chain.
+
+## Documentation
+
+- [`docs/architecture.md`](docs/architecture.md): components, order state machines, data model and sequence diagrams
+- [`docs/events.md`](docs/events.md): Kafka topics, event envelope and conversion rules (cents ↔ units, UUID ↔ bytes32)
+- [`core-api` OpenAPI](core-api/src/main/resources/api-definition.yml) and [`chain-service` OpenAPI](chain-service/src/main/resources/api-definition.yml): REST contracts
 
 ## Repository structure
 
@@ -27,6 +33,7 @@ stablecoin-demo/
 ├── chain-service/      # Spring Boot (Java 25): holds MINTER_ROLE, sends transactions and listens to contract events
 ├── portal/             # React + Vite + wagmi/viem: user web app (connect wallet, sign in, mint/redeem)
 ├── infra/postgres/     # SQL init scripts (creates core_db and chain_db)
+├── docs/              # Architecture (Mermaid diagrams, data model, state machines) and Kafka event contract
 ├── docker-compose.yml  # Local infrastructure: PostgreSQL, Kafka (KRaft), Kafka UI, Anvil
 └── .env.example        # Environment variables template
 ```
