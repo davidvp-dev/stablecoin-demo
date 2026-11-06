@@ -34,6 +34,10 @@ contract EURDemo is ERC20, AccessControl, Pausable {
     constructor(address minterRoleAddress_, address pauserRoleAddress_, address blacklisterRoleAddress_)
         ERC20("Euro Demo", "EURD")
     {
+        if (
+            minterRoleAddress_ == address(0) || pauserRoleAddress_ == address(0)
+                || blacklisterRoleAddress_ == address(0)
+        ) revert ZeroAddress();
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, minterRoleAddress_);
         _grantRole(PAUSER_ROLE, pauserRoleAddress_);
@@ -87,7 +91,7 @@ contract EURDemo is ERC20, AccessControl, Pausable {
     }
 
     /**
-     * @dev Function that allows the admin to blacklist a user address
+     * @dev Function that allows the blacklister to blacklist a user address
      * @param user_ address to be blacklisted
      */
     function blacklist(address user_) external onlyRole(BLACKLISTER_ROLE) {
@@ -97,7 +101,7 @@ contract EURDemo is ERC20, AccessControl, Pausable {
     }
 
     /**
-     * @dev Function that allows the admin to remove a user from the blacklist
+     * @dev Function that allows the blacklister to remove a user from the blacklist
      * @param user_ address to be removed from blacklist
      */
     function removeFromBlacklist(address user_) external onlyRole(BLACKLISTER_ROLE) {
