@@ -1,15 +1,16 @@
 package com.stablecoin.coreapi.web;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.stablecoin.coreapi.generated.api.WalletsApi;
 import com.stablecoin.coreapi.generated.model.Wallet;
 import com.stablecoin.coreapi.generated.model.WalletChallenge;
 import com.stablecoin.coreapi.generated.model.WalletChallengeRequest;
 import com.stablecoin.coreapi.generated.model.WalletVerificationRequest;
 import com.stablecoin.coreapi.service.WalletsService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class WalletsApiImpl implements WalletsApi {
@@ -23,7 +24,8 @@ public class WalletsApiImpl implements WalletsApi {
 	}
 
 	@Override
-	public ResponseEntity<WalletChallenge> generateWalletChallenge(WalletChallengeRequest walletChallengeRequest) {
+	public ResponseEntity<WalletChallenge> generateWalletChallenge(
+			WalletChallengeRequest walletChallengeRequest) {
 		log.info("Generating wallet challenge for {}", walletChallengeRequest.getWalletAddress());
 		return ResponseEntity.ok(walletsService.generateWalletChallenge(walletChallengeRequest));
 	}

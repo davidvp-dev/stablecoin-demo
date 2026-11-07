@@ -6,6 +6,8 @@ import com.stablecoin.coreapi.generated.model.WalletChallengeRequest;
 import com.stablecoin.coreapi.generated.model.WalletVerificationRequest;
 import com.stablecoin.coreapi.infra.repository.PostgresWalletChallengeRepository;
 import com.stablecoin.coreapi.util.Constants;
+import com.stablecoin.coreapi.web.error.ApiException;
+import com.stablecoin.coreapi.web.error.ErrorCode;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
@@ -72,12 +74,12 @@ public class WalletsService {
 
 	private String validateAndChecksumWalletAddress(String address) {
 		if (address == null || address.isEmpty()) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Wallet address is required");
+			throw new ApiException(ErrorCode.INVALID_WALLET_ADDRESS, "Wallet address is required");
 		}
 		try {
 			return Keys.toChecksumAddress(address); // Validate Ethereum address format
 		} catch (RuntimeException e) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Ethereum wallet address");
+			throw new ApiException(ErrorCode.INVALID_WALLET_ADDRESS, "Invalid Ethereum wallet address: " + address);
 		}
 	}
 

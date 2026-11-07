@@ -1,14 +1,16 @@
 package com.stablecoin.coreapi.web;
 
+import java.util.UUID;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.stablecoin.coreapi.generated.api.RedeemOrdersApi;
 import com.stablecoin.coreapi.generated.model.CreateRedeemOrderRequest;
 import com.stablecoin.coreapi.generated.model.RedeemOrder;
 import com.stablecoin.coreapi.generated.model.RedeemOrderDetail;
 import com.stablecoin.coreapi.service.RedeemService;
-import java.util.UUID;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class RedeemOrdersApiImpl implements RedeemOrdersApi {
