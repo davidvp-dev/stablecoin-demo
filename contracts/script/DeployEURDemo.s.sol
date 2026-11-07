@@ -34,7 +34,11 @@ contract DeployEURDemo is Script {
     }
 
     function run() external returns (EURDemo eurDemo) {
-        DeployConfig memory config = loadConfig();
+        eurDemo = deploy(loadConfig());
+    }
+
+    /// @notice Deploys with an explicit config. Split from run() so tests can pass a config without touching .env.
+    function deploy(DeployConfig memory config) public returns (EURDemo eurDemo) {
         address admin = vm.addr(config.deployerPrivateKey);
 
         vm.startBroadcast(config.deployerPrivateKey);
@@ -73,7 +77,7 @@ contract DeployEURDemo is Script {
     }
 
     /// @dev Fails the script if the deployed contract does not hold exactly the expected roles (RF-SC-10).
-    function checkRoles(EURDemo eurDemo, address admin, DeployConfig memory config) internal view {
+    function checkRoles(EURDemo eurDemo, address admin, DeployConfig memory config) public view {
         if (!eurDemo.hasRole(eurDemo.DEFAULT_ADMIN_ROLE(), admin)) revert RoleNotGranted("DEFAULT_ADMIN_ROLE");
         if (!eurDemo.hasRole(eurDemo.MINTER_ROLE(), config.minter)) revert RoleNotGranted("MINTER_ROLE");
         if (!eurDemo.hasRole(eurDemo.PAUSER_ROLE(), config.pauser)) revert RoleNotGranted("PAUSER_ROLE");
