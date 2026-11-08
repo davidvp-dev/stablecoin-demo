@@ -1,17 +1,9 @@
 package com.stablecoin.coreapi.service;
 
-import com.stablecoin.coreapi.generated.model.Wallet;
-import com.stablecoin.coreapi.generated.model.WalletChallenge;
-import com.stablecoin.coreapi.generated.model.WalletChallengeRequest;
-import com.stablecoin.coreapi.generated.model.WalletVerificationRequest;
-import com.stablecoin.coreapi.infra.repository.PostgresWalletChallengeRepository;
-import com.stablecoin.coreapi.util.Constants;
-import com.stablecoin.coreapi.web.error.ApiException;
-import com.stablecoin.coreapi.web.error.ErrorCode;
-
 import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Locale;
@@ -22,6 +14,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.web3j.crypto.Keys;
+
+import com.stablecoin.coreapi.generated.model.Wallet;
+import com.stablecoin.coreapi.generated.model.WalletChallenge;
+import com.stablecoin.coreapi.generated.model.WalletChallengeRequest;
+import com.stablecoin.coreapi.generated.model.WalletStatus;
+import com.stablecoin.coreapi.generated.model.WalletVerificationRequest;
+import com.stablecoin.coreapi.infra.repository.PostgresWalletChallengeRepository;
+import com.stablecoin.coreapi.models.WalletChallengeData;
+import com.stablecoin.coreapi.util.Constants;
+import com.stablecoin.coreapi.util.SignatureUtils;
+import com.stablecoin.coreapi.web.error.ApiException;
+import com.stablecoin.coreapi.web.error.ErrorCode;
 
 @Service
 public class WalletsService {
@@ -72,6 +76,49 @@ public class WalletsService {
 		return challenge;
 	}
 
+	/**
+	 * Runs in one transaction: consuming the nonce and marking the wallet VERIFIED
+	 * either both commit or both roll back (any RuntimeException, such as
+	 * ApiException, triggers the rollback).
+	 */
+	@Transactional
+	public Wallet verifyWalletSignature(WalletVerificationRequest request) {
+		String checksumAddress = validateAndChecksumWalletAddress(request.getWalletAddress());
+		String storedAddress = checksumAddress.toLowerCase(Locale.ROOT);
+		String nonce = request.getNonce();
+
+		// retrieve the stored challenge and check it is unused and unexpired
+		WalletChallengeData data = walletChallengeRepository.getWalletChallengeByAddressAndNonce(storedAddress, nonce)
+				.orElseThrow(() -> new ApiException(ErrorCode.INVALID_NONCE,
+						"No challenge found for nonce " + nonce + " and wallet " + checksumAddress));
+		if (data.getUsedAt() != null) {
+			throw new ApiException(ErrorCode.NONCE_ALREADY_USED,
+					"Nonce " + nonce + " was already used at " + data.getUsedAt());
+		}
+		if (!data.getExpiresAt().isAfter(OffsetDateTime.now())) {
+			throw new ApiException(ErrorCode.CHALLENGE_EXPIRED,
+					"Challenge expired at " + data.getExpiresAt() + "; request a new one");
+		}
+
+		// recover the EIP-191 signer of the stored challenge message (checksum format)
+		String signerAddress = recoverSigner(data.getMessage(), request.getSignature());
+		validateSignerAddress(signerAddress, checksumAddress);
+		validateNonce(nonce, data.getNonce());
+
+		// consume the nonce; 0 rows updated means a concurrent request consumed it
+		// first
+		if (!walletChallengeRepository.markWalletChallengeUsed(nonce, storedAddress)) {
+			throw new ApiException(ErrorCode.NONCE_ALREADY_USED, "Nonce " + nonce + " was already used");
+		}
+		OffsetDateTime verifiedAt = walletChallengeRepository.markWalletVerified(storedAddress);
+
+		Wallet walletResponse = new Wallet();
+		walletResponse.setWalletAddress(checksumAddress);
+		walletResponse.setStatus(WalletStatus.VERIFIED);
+		walletResponse.setVerifiedAt(verifiedAt);
+		return walletResponse;
+	}
+
 	private String validateAndChecksumWalletAddress(String address) {
 		if (address == null || address.isEmpty()) {
 			throw new ApiException(ErrorCode.INVALID_WALLET_ADDRESS, "Wallet address is required");
@@ -105,8 +152,23 @@ public class WalletsService {
 		throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Wallet lookup is not implemented");
 	}
 
-	public Wallet verifyWalletSignature(WalletVerificationRequest request) {
-		throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
-				"Wallet signature verification is not implemented");
+	private void validateSignerAddress(String signerAddress, String requestWalletAddress) {
+		if (!signerAddress.equalsIgnoreCase(requestWalletAddress)) {
+			throw new ApiException(ErrorCode.INVALID_SIGNATURE, "Signature does not match the wallet address");
+		}
+	}
+
+	private void validateNonce(String requestNonce, String storedNonce) {
+		if (!requestNonce.equals(storedNonce)) {
+			throw new ApiException(ErrorCode.INVALID_NONCE, "Nonce does not match the stored challenge");
+		}
+	}
+
+	private String recoverSigner(String message, String signature) {
+		try {
+			return SignatureUtils.recoverPersonalSignSigner(message, signature);
+		} catch (IllegalArgumentException e) {
+			throw new ApiException(ErrorCode.INVALID_SIGNATURE, e.getMessage());
+		}
 	}
 }
