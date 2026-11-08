@@ -20,7 +20,7 @@ The project copies, at a small scale, how a real e-money token issuer works:
 
 ## Documentation
 
-- [`docs/architecture.md`](docs/architecture.md): components, order state machines, data model and sequence diagrams
+- [`docs/architecture.md`](docs/architecture.md): components, conventions, [transaction boundaries](docs/architecture.md#transaction-boundaries), order state machines, data model and sequence diagrams
 - [`docs/events.md`](docs/events.md): Kafka topics, event envelope and conversion rules (cents ↔ units, UUID ↔ bytes32)
 - [`docs/deployments.md`](docs/deployments.md): contract addresses on Anvil and Sepolia, with the roles granted
 - [`core-api` OpenAPI](core-api/src/main/resources/api-definition.yml) and [`chain-service` OpenAPI](chain-service/src/main/resources/api-definition.yml): REST contracts
