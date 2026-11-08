@@ -7,12 +7,11 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Locale;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 import org.web3j.crypto.Keys;
 
 import com.stablecoin.coreapi.generated.model.Wallet;
@@ -119,6 +118,17 @@ public class WalletsService {
 		return walletResponse;
 	}
 
+	public Wallet getWallet(String address) {
+		String checksumAddress = validateAndChecksumWalletAddress(address);
+		String storedAddress = checksumAddress.toLowerCase(Locale.ROOT);
+
+		Optional<Wallet> walletOptional = walletChallengeRepository.getWalletByAddress(storedAddress);
+		if (!walletOptional.isPresent()) {
+			throw new ApiException(ErrorCode.NOT_FOUND, "Wallet not found");
+		}
+		return walletOptional.get().walletAddress(checksumAddress);
+	}
+
 	private String validateAndChecksumWalletAddress(String address) {
 		if (address == null || address.isEmpty()) {
 			throw new ApiException(ErrorCode.INVALID_WALLET_ADDRESS, "Wallet address is required");
@@ -146,10 +156,6 @@ public class WalletsService {
 		}
 
 		return message;
-	}
-
-	public Wallet getWallet(String address) {
-		throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Wallet lookup is not implemented");
 	}
 
 	private void validateSignerAddress(String signerAddress, String requestWalletAddress) {

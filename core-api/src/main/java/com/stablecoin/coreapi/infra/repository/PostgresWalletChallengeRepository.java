@@ -6,6 +6,8 @@ import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import com.stablecoin.coreapi.generated.model.Wallet;
+import com.stablecoin.coreapi.generated.model.WalletStatus;
 import com.stablecoin.coreapi.models.WalletChallengeData;
 import com.stablecoin.coreapi.util.Constants;
 
@@ -62,7 +64,7 @@ public class PostgresWalletChallengeRepository {
     public Optional<WalletChallengeData> getWalletChallengeByAddressAndNonce(String walletAddress, String nonce) {
         return jdbc.sql(Constants.SELECT_WALLET_CHALLENGE_BY_NONCE_QUERY)
                 .param("nonce", nonce)
-                .param("wallet_address", walletAddress)
+                .param("walletAddress", walletAddress)
                 .query((rs, rowNum) -> {
                     WalletChallengeData challengeData = new WalletChallengeData();
                     challengeData.setNonce(rs.getString("nonce"));
@@ -72,6 +74,24 @@ public class PostgresWalletChallengeRepository {
                     challengeData.setUsedAt(rs.getObject("used_at", OffsetDateTime.class));
                     challengeData.setCreatedAt(rs.getObject("created_at", OffsetDateTime.class));
                     return challengeData;
+                })
+                .optional();
+    }
+
+    /**
+     * Get the wallet by its address. Returns an Optional<Wallet> which is empty if
+     * the wallet does not exist.
+     */
+    public Optional<Wallet> getWalletByAddress(String walletAddress) {
+        return jdbc.sql(Constants.SELECT_WALLET_BY_ADDRESS_QUERY)
+                .param("walletAddress", walletAddress)
+                .query((rs, rowNum) -> {
+                    Wallet wallet = new Wallet();
+                    WalletStatus walletStatus = WalletStatus.fromValue(rs.getString("status"));
+                    wallet.setWalletAddress(rs.getString("wallet_address"));
+                    wallet.setStatus(walletStatus);
+                    wallet.setVerifiedAt(rs.getObject("verified_at", OffsetDateTime.class));
+                    return wallet;
                 })
                 .optional();
     }

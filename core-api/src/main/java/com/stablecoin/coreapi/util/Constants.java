@@ -32,7 +32,7 @@ public final class Constants {
 	public static final String SELECT_WALLET_CHALLENGE_BY_NONCE_QUERY = """
 			SELECT nonce, wallet_address, message, expires_at, used_at, created_at
 			FROM wallet_challenges
-			WHERE nonce = :nonce AND wallet_address = :wallet_address
+			WHERE nonce = :nonce AND wallet_address = :walletAddress
 			""";
 
 	/**
@@ -54,6 +54,12 @@ public final class Constants {
 			SET status = 'VERIFIED', verified_at = COALESCE(verified_at, NOW())
 			WHERE wallet_address = :walletAddress
 			RETURNING verified_at
+			""";
+
+	public static final String SELECT_WALLET_BY_ADDRESS_QUERY = """
+			SELECT wallet_address, status, verified_at
+			FROM wallets
+			WHERE wallet_address = :walletAddress
 			""";
 
 	public static final String SIWE_MESSAGE_TEMPLATE = """
