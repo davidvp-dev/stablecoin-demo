@@ -98,9 +98,28 @@ public final class Constants {
 			RETURNING id, status, created_at, updated_at
 			""";
 
+	public static final String SELECT_MINT_ORDER_BY_ID_QUERY = """
+			SELECT id, wallet_address, amount_cents, sepa_reference, status, idempotency_key,
+			       request_hash, tx_hash, failure_reason, created_at, updated_at, expires_at
+			FROM mint_orders
+			WHERE id = :id
+			""";
+
 	public static final String INSERT_MINT_ORDER_STATE_TRANSITION_QUERY = """
 			INSERT INTO order_state_transitions (order_id, order_type, from_status, to_status, cause)
 			VALUES (:orderId, :orderType, :fromStatus, :toStatus, :cause)
+			""";
+
+	/**
+	 * Status history of one order, oldest first. Rejected transitions
+	 * (applied = false) are kept for traceability but are not part of the
+	 * order's history. id breaks ties between transitions in the same instant.
+	 */
+	public static final String SELECT_ORDER_STATE_TRANSITIONS_QUERY = """
+			SELECT from_status, to_status, cause, at
+			FROM order_state_transitions
+			WHERE order_type = :orderType AND order_id = :orderId AND applied = TRUE
+			ORDER BY at, id
 			""";
 
 	private Constants() {

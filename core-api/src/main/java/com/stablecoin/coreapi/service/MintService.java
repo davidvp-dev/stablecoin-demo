@@ -13,7 +13,6 @@ import java.util.UUID;
 
 import org.web3j.crypto.Keys;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,8 +29,6 @@ import com.stablecoin.coreapi.models.MintOrderData;
 import com.stablecoin.coreapi.util.AddressUtils;
 import com.stablecoin.coreapi.web.error.ApiException;
 import com.stablecoin.coreapi.web.error.ErrorCode;
-
-import jakarta.transaction.Transactional;
 
 @Service
 public class MintService {
@@ -148,8 +145,29 @@ public class MintService {
 		return mintOrder;
 	}
 
+	/**
+	 * The order and its status history. Read-only, but both queries run in one
+	 * transaction so the history can't be ahead of the order's status.
+	 */
+	@Transactional(readOnly = true)
 	public MintOrderDetail getMintOrder(UUID id) {
-		throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Mint order lookup is not implemented");
+		MintOrderData orderData = mintOrdersRepository.findMintOrderById(id)
+				.orElseThrow(() -> new ApiException(ErrorCode.ORDER_NOT_FOUND, "Mint order not found: " + id));
+		List<StatusTransition> history = mintOrdersRepository.findMintOrderStateTransitions(id);
+
+		MintOrderDetail detail = new MintOrderDetail();
+		detail.setId(orderData.getId());
+		detail.setWalletAddress(Keys.toChecksumAddress(orderData.getWalletAddress()));
+		detail.setAmountCents(orderData.getAmountCents());
+		detail.setStatus(orderData.getStatus());
+		detail.setSepaReference(orderData.getSepaReference());
+		detail.setIssuerIban(issuerIban);
+		detail.setTxHash(orderData.getTxHash());
+		detail.setFailureReason(orderData.getFailureReason());
+		detail.setCreatedAt(orderData.getCreatedAt());
+		detail.setExpiresAt(orderData.getExpiresAt());
+		detail.setHistory(history);
+		return detail;
 	}
 
 	private static String generateRandomAlphanumeric(int length) {
