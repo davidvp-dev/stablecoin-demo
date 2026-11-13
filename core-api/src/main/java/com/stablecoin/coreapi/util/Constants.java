@@ -82,11 +82,19 @@ public final class Constants {
 			Issued At: {issuedAt}
 			Expiration Time: {expiresAt}""";
 
+	/**
+	 * Inserts a mint order. {@code ON CONFLICT DO NOTHING} handles two requests
+	 * with the same new Idempotency-Key at the same time: PostgreSQL makes the
+	 * second insert wait for the first transaction, and then inserts nothing and
+	 * returns no row instead of failing with a unique violation (which would abort
+	 * the transaction). The caller then re-reads the order as a replay.
+	 */
 	public static final String INSERT_MINT_ORDER_QUERY = """
 			INSERT INTO mint_orders (wallet_address, amount_cents, sepa_reference, idempotency_key,
 			                         request_hash, expires_at)
 			VALUES (:walletAddress, :amountCents, :sepaReference, :idempotencyKey,
 			        :requestHash, :expiresAt)
+			ON CONFLICT (idempotency_key) DO NOTHING
 			RETURNING id, status, created_at, updated_at
 			""";
 

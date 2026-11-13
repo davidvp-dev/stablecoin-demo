@@ -1,6 +1,9 @@
 package com.stablecoin.coreapi.infra.repository;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -8,11 +11,14 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import com.stablecoin.coreapi.generated.model.MintOrderStatus;
+import com.stablecoin.coreapi.generated.model.StatusTransition;
 import com.stablecoin.coreapi.models.MintOrderData;
 import com.stablecoin.coreapi.util.Constants;
 
 @Repository
 public class PostgresMintOrdersRepository {
+
+    private static final String ORDER_TYPE = "MINT";
 
     private final JdbcClient jdbc;
 
@@ -27,22 +33,14 @@ public class PostgresMintOrdersRepository {
     public Optional<MintOrderData> findMintOrderByIdempotencyKey(String idempotencyKey) {
         return jdbc.sql(Constants.SELECT_MINT_ORDER_BY_IDEMPOTENCY_KEY_QUERY)
                 .param("idempotencyKey", idempotencyKey)
-                .query((rs, rowNum) -> {
-                    MintOrderData order = new MintOrderData();
-                    order.setId(rs.getObject("id", UUID.class));
-                    order.setWalletAddress(rs.getString("wallet_address"));
-                    order.setAmountCents(rs.getLong("amount_cents"));
-                    order.setSepaReference(rs.getString("sepa_reference"));
-                    order.setStatus(MintOrderStatus.fromValue(rs.getString("status")));
-                    order.setIdempotencyKey(rs.getString("idempotency_key"));
-                    order.setRequestHash(rs.getString("request_hash"));
-                    order.setTxHash(rs.getString("tx_hash"));
-                    order.setFailureReason(rs.getString("failure_reason"));
-                    order.setCreatedAt(rs.getObject("created_at", OffsetDateTime.class));
-                    order.setUpdatedAt(rs.getObject("updated_at", OffsetDateTime.class));
-                    order.setExpiresAt(rs.getObject("expires_at", OffsetDateTime.class));
-                    return order;
-                })
+                .query((rs, rowNum) -> mapMintOrder(rs))
+                .optional();
+    }
+
+    public Optional<MintOrderData> findMintOrderById(UUID id) {
+        return jdbc.sql(Constants.SELECT_MINT_ORDER_BY_ID_QUERY)
+                .param("id", id)
+                .query((rs, rowNum) -> mapMintOrder(rs))
                 .optional();
     }
 
@@ -51,8 +49,11 @@ public class PostgresMintOrdersRepository {
      * (gen_random_uuid()). The columns the database fills in (id, status,
      * created_at, updated_at) are also copied into orderData, so the caller can
      * build the response without a second query.
+     *
+     * Returns an empty Optional when another transaction already inserted an
+     * order with the same Idempotency-Key (see INSERT_MINT_ORDER_QUERY).
      */
-    public UUID insertMintOrder(MintOrderData orderData) {
+    public Optional<UUID> insertMintOrder(MintOrderData orderData) {
         return jdbc.sql(Constants.INSERT_MINT_ORDER_QUERY)
                 .param("walletAddress", orderData.getWalletAddress())
                 .param("amountCents", orderData.getAmountCents())
@@ -67,16 +68,49 @@ public class PostgresMintOrdersRepository {
                     orderData.setUpdatedAt(rs.getObject("updated_at", OffsetDateTime.class));
                     return orderData.getId();
                 })
-                .single();
+                .optional();
     }
 
     public void insertMintOrderStateTransition(UUID orderId, String fromStatus, String toStatus, String cause) {
         jdbc.sql(Constants.INSERT_MINT_ORDER_STATE_TRANSITION_QUERY)
                 .param("orderId", orderId)
-                .param("orderType", "MINT")
+                .param("orderType", ORDER_TYPE)
                 .param("fromStatus", fromStatus)
                 .param("toStatus", toStatus)
                 .param("cause", cause)
                 .update();
+    }
+
+    /** Applied status changes of the order, oldest first. */
+    public List<StatusTransition> findMintOrderStateTransitions(UUID orderId) {
+        return jdbc.sql(Constants.SELECT_ORDER_STATE_TRANSITIONS_QUERY)
+                .param("orderType", ORDER_TYPE)
+                .param("orderId", orderId)
+                .query((rs, rowNum) -> {
+                    StatusTransition transition = new StatusTransition();
+                    transition.setFromStatus(rs.getString("from_status"));
+                    transition.setToStatus(rs.getString("to_status"));
+                    transition.setCause(rs.getString("cause"));
+                    transition.setAt(rs.getObject("at", OffsetDateTime.class));
+                    return transition;
+                })
+                .list();
+    }
+
+    private static MintOrderData mapMintOrder(ResultSet rs) throws SQLException {
+        MintOrderData order = new MintOrderData();
+        order.setId(rs.getObject("id", UUID.class));
+        order.setWalletAddress(rs.getString("wallet_address"));
+        order.setAmountCents(rs.getLong("amount_cents"));
+        order.setSepaReference(rs.getString("sepa_reference"));
+        order.setStatus(MintOrderStatus.fromValue(rs.getString("status")));
+        order.setIdempotencyKey(rs.getString("idempotency_key"));
+        order.setRequestHash(rs.getString("request_hash"));
+        order.setTxHash(rs.getString("tx_hash"));
+        order.setFailureReason(rs.getString("failure_reason"));
+        order.setCreatedAt(rs.getObject("created_at", OffsetDateTime.class));
+        order.setUpdatedAt(rs.getObject("updated_at", OffsetDateTime.class));
+        order.setExpiresAt(rs.getObject("expires_at", OffsetDateTime.class));
+        return order;
     }
 }

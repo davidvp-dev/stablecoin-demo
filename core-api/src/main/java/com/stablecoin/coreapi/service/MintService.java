@@ -4,7 +4,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -12,11 +15,12 @@ import org.web3j.crypto.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.stablecoin.coreapi.generated.model.CreateMintOrderRequest;
 import com.stablecoin.coreapi.generated.model.MintOrder;
 import com.stablecoin.coreapi.generated.model.MintOrderDetail;
+import com.stablecoin.coreapi.generated.model.StatusTransition;
 import com.stablecoin.coreapi.generated.model.Wallet;
 import com.stablecoin.coreapi.generated.model.WalletStatus;
 import com.stablecoin.coreapi.infra.repository.PostgresMintOrdersRepository;
@@ -71,14 +75,7 @@ public class MintService {
 		// request_hash matches.
 		Optional<MintOrderData> existingOrder = mintOrdersRepository.findMintOrderByIdempotencyKey(idempotencyKey);
 		if (existingOrder.isPresent()) {
-			MintOrderData orderData = existingOrder.get();
-			if (orderData.getRequestHash().equals(requestHash)) {
-				// Replay: return the existing order (the API answers 200, not 201).
-				return CreateMintOrderResult.replayed(toMintOrder(orderData));
-			} else {
-				throw new ApiException(ErrorCode.IDEMPOTENCY_KEY_REUSED,
-						"Idempotency key reused with different request");
-			}
+			return replay(existingOrder.get(), requestHash);
 		}
 
 		// 4. Check the wallet: it must exist in `wallets` with status VERIFIED,
@@ -95,10 +92,20 @@ public class MintService {
 		mintOrderData.setSepaReference(sepaReference);
 		mintOrderData.setIdempotencyKey(idempotencyKey);
 		mintOrderData.setRequestHash(requestHash);
-		mintOrderData.setExpiresAt(java.time.OffsetDateTime.now().plusHours(24));
+		mintOrderData.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).plusHours(24));
 
 		// 6. INSERT into mint_orders (wallet_address, amount_cents, sepa_reference,
-		UUID orderId = mintOrdersRepository.insertMintOrder(mintOrderData);
+		Optional<UUID> insertedId = mintOrdersRepository.insertMintOrder(mintOrderData);
+		if (insertedId.isEmpty()) {
+			// A concurrent request with the same Idempotency-Key committed its order
+			// between our lookup and our insert. Its row is visible now (READ
+			// COMMITTED), so treat this request as a replay of that one.
+			MintOrderData concurrentOrder = mintOrdersRepository.findMintOrderByIdempotencyKey(idempotencyKey)
+					.orElseThrow(() -> new ApiException(ErrorCode.INTERNAL_ERROR,
+							"Mint order conflict on Idempotency-Key but no order found"));
+			return replay(concurrentOrder, requestHash);
+		}
+		UUID orderId = insertedId.get();
 
 		// 7. INSERT the initial row in order_state_transitions:
 		mintOrdersRepository.insertMintOrderStateTransition(orderId,
@@ -107,6 +114,18 @@ public class MintService {
 		// 8. Map to MintOrder. insertMintOrder already copied id, status and created_at
 		// into mintOrderData. created = true, so the controller answers 201.
 		return CreateMintOrderResult.created(toMintOrder(mintOrderData));
+	}
+
+	/**
+	 * Same key and same body: return the existing order (the API answers 200, not
+	 * 201). Same key with a different body: the client reused the key by mistake.
+	 */
+	private CreateMintOrderResult replay(MintOrderData existingOrder, String requestHash) {
+		if (!existingOrder.getRequestHash().equals(requestHash)) {
+			throw new ApiException(ErrorCode.IDEMPOTENCY_KEY_REUSED,
+					"Idempotency key reused with different request");
+		}
+		return CreateMintOrderResult.replayed(toMintOrder(existingOrder));
 	}
 
 	/**

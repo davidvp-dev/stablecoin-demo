@@ -27,7 +27,8 @@ public enum ErrorCode {
 	CHALLENGE_EXPIRED(HttpStatus.UNPROCESSABLE_CONTENT, "Challenge expired"),
 	INVALID_SIGNATURE(HttpStatus.BAD_REQUEST, "Invalid signature"),
 	WALLET_NOT_VERIFIED(HttpStatus.UNPROCESSABLE_CONTENT, "Wallet not verified"),
-	IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "Idempotency-Key already used");
+	IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "Idempotency-Key already used"),
+	ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "Order not found");
 
 	private final HttpStatus status;
 	private final String title;
