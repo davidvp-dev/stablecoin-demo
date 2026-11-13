@@ -1,0 +1,3 @@
+CREATE DATABASE core_db;
+
+CREATE DATABASE chain_db;

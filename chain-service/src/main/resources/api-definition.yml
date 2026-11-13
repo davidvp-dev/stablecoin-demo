@@ -1,0 +1,103 @@
+openapi: "3.0.3"
+info:
+  title: chain-service
+  version: "1.0.0"
+  description: |
+    Internal read API of chain-service, the only backend component that reads and writes the
+    blockchain. Consumed by core-api (reconciliation) and used for operations monitoring.
+    Amounts are integer euro cents (1 cent = 10,000 token units, 6 decimals).
+servers:
+  - url: /chain
+tags:
+  - name: chain
+paths:
+  /supply:
+    get:
+      summary: Current on-chain EURD supply in cents
+      description: Reads `totalSupply()` and converts it to cents. (RF-CHAIN-10)
+      operationId: getSupply
+      tags: [chain]
+      responses:
+        "200":
+          description: Supply read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supply"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /health:
+    get:
+      summary: Event-reading progress
+      description: Last processed block and lag behind the node head. (RF-CHAIN-11)
+      operationId: getHealth
+      tags: [chain]
+      responses:
+        "200":
+          description: Health read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChainHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  responses:
+    ServiceUnavailable:
+      description: RPC node not reachable
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Problem:
+      type: object
+      required: [title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        code:
+          type: string
+          example: RPC_UNAVAILABLE
+    Supply:
+      type: object
+      required: [supplyCents, blockNumber, readAt]
+      properties:
+        supplyCents:
+          type: integer
+          format: int64
+          example: 125000
+        blockNumber:
+          type: integer
+          format: int64
+          example: 7012345
+        readAt:
+          type: string
+          format: date-time
+    ChainHealth:
+      type: object
+      required: [chainId, lastProcessedBlock, headBlock, lagBlocks, confirmationsRequired]
+      properties:
+        chainId:
+          type: integer
+          format: int64
+          example: 31337
+        lastProcessedBlock:
+          type: integer
+          format: int64
+        headBlock:
+          type: integer
+          format: int64
+        lagBlocks:
+          type: integer
+          format: int64
+        confirmationsRequired:
+          type: integer
+          example: 3

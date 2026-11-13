@@ -1,0 +1,788 @@
+openapi: "3.0.3"
+info:
+  title: core-api
+  version: "1.0.0"
+  description: |
+    Business API of the EURD stablecoin demo: wallet verification, mint and redeem orders,
+    simulated bank, live order status and reconciliation.
+
+    Conventions:
+    - Amounts are always **integer euro cents** (`amountCents`), never floating point.
+    - Wallet addresses are accepted in any case and returned in EIP-55 checksum format.
+    - Errors use Problem Details (RFC 9457) with `application/problem+json`.
+servers:
+  - url: /api
+tags:
+  - name: wallets
+    description: Wallet ownership verification (EIP-191)
+  - name: mint-orders
+    description: Mint (issuance) orders
+  - name: redeem-orders
+    description: Redeem (redemption) orders
+  - name: bank-sim
+    description: Simulated bank
+  - name: orders
+    description: Order history across mint and redeem
+  - name: orders-stream
+    description: Live order status changes (SSE). Implemented by hand with SseEmitter; the generated interface is not used.
+  - name: reconciliation
+    description: Ledger, chain and bank reconciliation
+paths:
+  /wallets/challenge:
+    post:
+      summary: Generate a one-time challenge for a wallet
+      description: |
+        Returns a human-readable message (app name, address, single-use nonce, issue date and
+        5-minute expiry) that the wallet must sign with EIP-191 `personal_sign`. (RF-CORE-01)
+      operationId: generateWalletChallenge
+      tags: [wallets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WalletChallengeRequest"
+      responses:
+        "200":
+          description: Challenge generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletChallenge"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /wallets/verify:
+    post:
+      summary: Verify the signed challenge and mark the wallet as verified
+      description: |
+        Recovers the signer from the EIP-191 signature and checks that it matches the address,
+        that the nonce exists, is unused and has not expired. On success the nonce is marked as
+        used and the wallet as VERIFIED. (RF-CORE-02)
+      operationId: verifyWalletSignature
+      tags: [wallets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WalletVerificationRequest"
+      responses:
+        "200":
+          description: Wallet verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wallet"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+  /wallets/{address}:
+    get:
+      summary: Get the verification status of a wallet
+      operationId: getWallet
+      tags: [wallets]
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+      responses:
+        "200":
+          description: Wallet found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wallet"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /mint-orders:
+    post:
+      summary: Create a mint order
+      description: |
+        Creates a mint order for a verified wallet with an amount between 1 € and 10.000 €.
+        Returns the issuer IBAN and a unique SEPA reference the client must use in the transfer.
+        Repeating the request with the same `Idempotency-Key` returns the same order. (RF-CORE-04, 05)
+      operationId: createMintOrder
+      tags: [mint-orders]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMintOrderRequest"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MintOrder"
+        "200":
+          description: Order already created with this Idempotency-Key (replay)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MintOrder"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+  /mint-orders/{id}:
+    get:
+      summary: Get a mint order with its status history
+      operationId: getMintOrder
+      tags: [mint-orders]
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      responses:
+        "200":
+          description: Order found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MintOrderDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /bank-sim/incoming-transfers:
+    post:
+      summary: Simulate an incoming SEPA transfer
+      description: |
+        Every transfer is always recorded. If the reference matches a CREATED mint order and the
+        amount matches, the order becomes PAID (and then APPROVED). If the amount differs, the
+        order becomes REJECTED and a simulated refund is recorded. If the reference is unknown,
+        the transfer is stored as UNASSIGNED. (RF-CORE-06, 07, 08)
+      operationId: createIncomingTransfer
+      tags: [bank-sim]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IncomingTransferRequest"
+      responses:
+        "201":
+          description: Transfer recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankTransfer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /redeem-orders:
+    post:
+      summary: Create a redeem order
+      description: |
+        Creates a redeem order for a verified wallet with an amount and a destination IBAN.
+        Returns the on-chain order id (bytes32) that the portal passes to `redeem(amount, orderId)`.
+        The order expires after 30 minutes if no matching on-chain redeem is observed. (RF-CORE-12)
+      operationId: createRedeemOrder
+      tags: [redeem-orders]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRedeemOrderRequest"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedeemOrder"
+        "200":
+          description: Order already created with this Idempotency-Key (replay)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedeemOrder"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+  /redeem-orders/{id}:
+    get:
+      summary: Get a redeem order with its status history
+      operationId: getRedeemOrder
+      tags: [redeem-orders]
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      responses:
+        "200":
+          description: Order found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedeemOrderDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /orders:
+    get:
+      summary: Order history of a wallet
+      description: Mint and redeem orders of a wallet, newest first, filterable by type and status. (RF-UI-09)
+      operationId: listOrders
+      tags: [orders]
+      parameters:
+        - $ref: "#/components/parameters/WalletQuery"
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/OrderType"
+        - name: status
+          in: query
+          required: false
+          description: A MintOrderStatus or RedeemOrderStatus value
+          schema:
+            type: string
+            example: COMPLETED
+      responses:
+        "200":
+          description: Orders of the wallet
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrderSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /orders/stream:
+    get:
+      summary: Live stream of order status changes of a wallet (SSE)
+      description: |
+        Server-Sent Events stream. Each status change of an order of the wallet is sent as an
+        event named `order-status-changed` whose `data` is an `OrderStatusChanged` JSON object.
+        Changes must reach the portal in under 2 seconds. (RF-CORE-18, RNF-06)
+      operationId: streamOrders
+      tags: [orders-stream]
+      parameters:
+        - $ref: "#/components/parameters/WalletQuery"
+      responses:
+        "200":
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/OrderStatusChanged"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /reconciliation:
+    get:
+      summary: Run an on-demand reconciliation
+      description: |
+        Compares EURD in circulation according to the ledger, the on-chain supply (read from
+        chain-service) and the simulated bank reserve, after discounting amounts in transit
+        (mints paid but not yet confirmed, redeems burned but not yet paid out). (RF-CORE-17)
+      operationId: getReconciliation
+      tags: [reconciliation]
+      responses:
+        "200":
+          description: Reconciliation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationReport"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  parameters:
+    AddressPath:
+      name: address
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Address"
+    OrderIdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WalletQuery:
+      name: wallet
+      in: query
+      required: true
+      schema:
+        $ref: "#/components/schemas/Address"
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-generated unique key (e.g. a UUID). Reusing it with a different body returns 409.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
+  responses:
+    BadRequest:
+      description: Malformed request or invalid fields
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: Idempotency-Key already used with a different request body
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnprocessableEntity:
+      description: Valid request rejected by a business rule (e.g. wallet not verified, expired challenge)
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ServiceUnavailable:
+      description: A dependency (chain-service) is not available
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    # ---------- common ----------
+    Problem:
+      type: object
+      description: Problem Details (RFC 9457) extended with a business code and invalid fields
+      required: [title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri
+          example: "about:blank"
+        title:
+          type: string
+          example: Wallet not verified
+        status:
+          type: integer
+          example: 422
+        detail:
+          type: string
+          example: The wallet 0x1234…abcd must be verified before creating orders
+        instance:
+          type: string
+          example: /api/mint-orders
+        code:
+          type: string
+          description: Stable business error code for the portal to map to a user message
+          example: WALLET_NOT_VERIFIED
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          example: amountCents
+        message:
+          type: string
+          example: must be between 100 and 1000000
+    Address:
+      type: string
+      description: Ethereum address (any case accepted; returned in EIP-55 checksum format)
+      pattern: "^0x[a-fA-F0-9]{40}$"
+      example: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    Iban:
+      type: string
+      pattern: "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$"
+      example: ES9121000418450200051332
+    TxHash:
+      type: string
+      pattern: "^0x[a-fA-F0-9]{64}$"
+      example: "0x5d1c6f2a9e0b7d3c4a8f1e2b6c9d0a7e3f5b8c1d2e4f6a9b0c3d5e7f8a1b2c3d"
+    OrderType:
+      type: string
+      enum: [MINT, REDEEM]
+    MintOrderStatus:
+      type: string
+      enum:
+        [
+          CREATED,
+          PAID,
+          REJECTED,
+          EXPIRED,
+          APPROVED,
+          SUBMITTED,
+          COMPLETED,
+          FAILED,
+        ]
+    RedeemOrderStatus:
+      type: string
+      enum: [CREATED, TOKENS_BURNED, UNDER_REVIEW, EXPIRED, COMPLETED]
+    StatusTransition:
+      type: object
+      required: [toStatus, cause, at]
+      properties:
+        fromStatus:
+          type: string
+          nullable: true
+          description: Null for the initial transition
+          example: SUBMITTED
+        toStatus:
+          type: string
+          example: COMPLETED
+        cause:
+          type: string
+          example: MintConfirmed
+        at:
+          type: string
+          format: date-time
+    # ---------- wallets ----------
+    WalletChallengeRequest:
+      type: object
+      required: [walletAddress]
+      properties:
+        walletAddress:
+          $ref: "#/components/schemas/Address"
+    WalletChallenge:
+      type: object
+      required: [message, nonce, issuedAt, expiresAt]
+      properties:
+        message:
+          type: string
+          description: Exact text the wallet must sign (EIP-191 personal_sign)
+        nonce:
+          type: string
+          example: 4q0h3v1k9m2p7s8t5r6w0x1y2z
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    WalletVerificationRequest:
+      type: object
+      required: [walletAddress, nonce, signature]
+      properties:
+        walletAddress:
+          $ref: "#/components/schemas/Address"
+        nonce:
+          type: string
+          description: Nonce of the challenge that was signed
+        signature:
+          type: string
+          description: 65-byte EIP-191 signature (r, s, v)
+          pattern: "^0x[a-fA-F0-9]{130}$"
+    WalletStatus:
+      type: string
+      enum: [PENDING, VERIFIED]
+    Wallet:
+      type: object
+      required: [walletAddress, status]
+      properties:
+        walletAddress:
+          $ref: "#/components/schemas/Address"
+        status:
+          $ref: "#/components/schemas/WalletStatus"
+        verifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+    # ---------- mint ----------
+    CreateMintOrderRequest:
+      type: object
+      required: [walletAddress, amountCents]
+      properties:
+        walletAddress:
+          $ref: "#/components/schemas/Address"
+        amountCents:
+          type: integer
+          format: int64
+          minimum: 100
+          maximum: 1000000
+          description: 1 € to 10.000 €
+          example: 125000
+    MintOrder:
+      type: object
+      required:
+        [
+          id,
+          walletAddress,
+          amountCents,
+          status,
+          sepaReference,
+          issuerIban,
+          createdAt,
+          expiresAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        walletAddress:
+          $ref: "#/components/schemas/Address"
+        amountCents:
+          type: integer
+          format: int64
+        status:
+          $ref: "#/components/schemas/MintOrderStatus"
+        sepaReference:
+          type: string
+          description: Unique reference the client must include in the SEPA transfer
+          example: EURD-7K3M9Q2X
+        issuerIban:
+          $ref: "#/components/schemas/Iban"
+        txHash:
+          allOf:
+            - $ref: "#/components/schemas/TxHash"
+          nullable: true
+        failureReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    MintOrderDetail:
+      allOf:
+        - $ref: "#/components/schemas/MintOrder"
+        - type: object
+          required: [history]
+          properties:
+            history:
+              type: array
+              items:
+                $ref: "#/components/schemas/StatusTransition"
+    # ---------- bank sim ----------
+    IncomingTransferRequest:
+      type: object
+      required: [reference, amountCents]
+      properties:
+        reference:
+          type: string
+          maxLength: 140
+          example: EURD-7K3M9Q2X
+        amountCents:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 125000
+        senderIban:
+          $ref: "#/components/schemas/Iban"
+    TransferDirection:
+      type: string
+      enum: [INCOMING, OUTGOING]
+    TransferOutcome:
+      type: string
+      description: |
+        MATCHED: assigned to an order with the right amount.
+        REJECTED: assigned to an order but the amount differed; a refund was recorded.
+        UNASSIGNED: no order with that reference.
+      enum: [MATCHED, REJECTED, UNASSIGNED]
+    BankTransfer:
+      type: object
+      required: [id, direction, reference, amountCents, outcome, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        direction:
+          $ref: "#/components/schemas/TransferDirection"
+        reference:
+          type: string
+        amountCents:
+          type: integer
+          format: int64
+        outcome:
+          $ref: "#/components/schemas/TransferOutcome"
+        orderId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    # ---------- redeem ----------
+    CreateRedeemOrderRequest:
+      type: object
+      required: [walletAddress, amountCents, destinationIban]
+      properties:
+        walletAddress:
+          $ref: "#/components/schemas/Address"
+        amountCents:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Must not exceed the on-chain balance (checked by the portal and enforced by the contract)
+          example: 50000
+        destinationIban:
+          $ref: "#/components/schemas/Iban"
+    RedeemOrder:
+      type: object
+      required:
+        [
+          id,
+          onchainId,
+          walletAddress,
+          amountCents,
+          destinationIban,
+          status,
+          createdAt,
+          expiresAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        onchainId:
+          type: string
+          description: bytes32 order id to pass to `redeem(amount, orderId)` (see docs/events.md for the rule)
+          pattern: "^0x[a-fA-F0-9]{64}$"
+          example: "0x000000000000000000000000000000009b2e4c1a7d3f4e8b9a2c5d6e7f8a9b0c"
+        walletAddress:
+          $ref: "#/components/schemas/Address"
+        amountCents:
+          type: integer
+          format: int64
+        destinationIban:
+          $ref: "#/components/schemas/Iban"
+        status:
+          $ref: "#/components/schemas/RedeemOrderStatus"
+        txHash:
+          allOf:
+            - $ref: "#/components/schemas/TxHash"
+          nullable: true
+        failureReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    RedeemOrderDetail:
+      allOf:
+        - $ref: "#/components/schemas/RedeemOrder"
+        - type: object
+          required: [history]
+          properties:
+            history:
+              type: array
+              items:
+                $ref: "#/components/schemas/StatusTransition"
+    # ---------- orders ----------
+    OrderSummary:
+      type: object
+      required:
+        [id, type, walletAddress, amountCents, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/OrderType"
+        walletAddress:
+          $ref: "#/components/schemas/Address"
+        amountCents:
+          type: integer
+          format: int64
+        status:
+          type: string
+          description: A MintOrderStatus or RedeemOrderStatus value depending on `type`
+          example: COMPLETED
+        txHash:
+          allOf:
+            - $ref: "#/components/schemas/TxHash"
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    OrderStatusChanged:
+      type: object
+      required: [orderId, type, toStatus, cause, at]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/OrderType"
+        fromStatus:
+          type: string
+          nullable: true
+        toStatus:
+          type: string
+        cause:
+          type: string
+        txHash:
+          allOf:
+            - $ref: "#/components/schemas/TxHash"
+          nullable: true
+        at:
+          type: string
+          format: date-time
+    # ---------- reconciliation ----------
+    ReconciliationResult:
+      type: string
+      enum: [BALANCED, MISMATCH]
+    ReconciliationReport:
+      type: object
+      required:
+        - result
+        - ledgerCirculationCents
+        - onchainSupplyCents
+        - onchainBlockNumber
+        - bankReserveCents
+        - paidNotMintedCents
+        - burnedNotPaidCents
+        - differenceCents
+        - checkedAt
+      properties:
+        result:
+          $ref: "#/components/schemas/ReconciliationResult"
+        ledgerCirculationCents:
+          type: integer
+          format: int64
+          description: EURD in circulation according to the ledger
+        onchainSupplyCents:
+          type: integer
+          format: int64
+          description: totalSupply() converted to cents
+        onchainBlockNumber:
+          type: integer
+          format: int64
+          description: Block at which the supply was read
+        bankReserveCents:
+          type: integer
+          format: int64
+          description: Balance of the simulated bank reserve
+        paidNotMintedCents:
+          type: integer
+          format: int64
+          description: In transit — mint orders paid but not yet confirmed on-chain
+        burnedNotPaidCents:
+          type: integer
+          format: int64
+          description: In transit — redeem orders burned on-chain but not yet paid out
+        differenceCents:
+          type: integer
+          format: int64
+          description: Largest absolute difference between the three adjusted figures (0 when BALANCED)
+        checkedAt:
+          type: string
+          format: date-time
