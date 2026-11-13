@@ -62,6 +62,13 @@ public final class Constants {
 			WHERE wallet_address = :walletAddress
 			""";
 
+	public static final String SELECT_MINT_ORDER_BY_IDEMPOTENCY_KEY_QUERY = """
+			SELECT id, wallet_address, amount_cents, sepa_reference, status, idempotency_key,
+			       request_hash, tx_hash, failure_reason, created_at, updated_at, expires_at
+			FROM mint_orders
+			WHERE idempotency_key = :idempotencyKey
+			""";
+
 	public static final String SIWE_MESSAGE_TEMPLATE = """
 			{domain} wants you to sign in with your Ethereum account:
 			{address}
@@ -74,6 +81,19 @@ public final class Constants {
 			Nonce: {nonce}
 			Issued At: {issuedAt}
 			Expiration Time: {expiresAt}""";
+
+	public static final String INSERT_MINT_ORDER_QUERY = """
+			INSERT INTO mint_orders (wallet_address, amount_cents, sepa_reference, idempotency_key,
+			                         request_hash, expires_at)
+			VALUES (:walletAddress, :amountCents, :sepaReference, :idempotencyKey,
+			        :requestHash, :expiresAt)
+			RETURNING id, status, created_at, updated_at
+			""";
+
+	public static final String INSERT_MINT_ORDER_STATE_TRANSITION_QUERY = """
+			INSERT INTO order_state_transitions (order_id, order_type, from_status, to_status, cause)
+			VALUES (:orderId, :orderType, :fromStatus, :toStatus, :cause)
+			""";
 
 	private Constants() {
 	}

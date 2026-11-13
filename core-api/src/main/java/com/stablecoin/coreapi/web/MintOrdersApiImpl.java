@@ -10,6 +10,7 @@ import com.stablecoin.coreapi.generated.api.MintOrdersApi;
 import com.stablecoin.coreapi.generated.model.CreateMintOrderRequest;
 import com.stablecoin.coreapi.generated.model.MintOrder;
 import com.stablecoin.coreapi.generated.model.MintOrderDetail;
+import com.stablecoin.coreapi.models.CreateMintOrderResult;
 import com.stablecoin.coreapi.service.MintService;
 
 @RestController
@@ -24,8 +25,11 @@ public class MintOrdersApiImpl implements MintOrdersApi {
 	@Override
 	public ResponseEntity<MintOrder> createMintOrder(String idempotencyKey,
 			CreateMintOrderRequest createMintOrderRequest) {
-		return ResponseEntity.status(HttpStatus.CREATED)
-				.body(mintService.createMintOrder(idempotencyKey, createMintOrderRequest));
+		CreateMintOrderResult result = mintService.createMintOrder(idempotencyKey, createMintOrderRequest);
+		// 201 when this request created the order, 200 when it replays an earlier one
+		// with the same Idempotency-Key. The body is the same order in both cases.
+		HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
+		return ResponseEntity.status(status).body(result.order());
 	}
 
 	@Override

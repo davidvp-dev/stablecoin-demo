@@ -12,11 +12,11 @@ import com.stablecoin.coreapi.models.WalletChallengeData;
 import com.stablecoin.coreapi.util.Constants;
 
 @Repository
-public class PostgresWalletChallengeRepository {
+public class PostgresWalletsRepository {
 
     private final JdbcClient jdbc;
 
-    public PostgresWalletChallengeRepository(JdbcClient jdbc) {
+    public PostgresWalletsRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
 

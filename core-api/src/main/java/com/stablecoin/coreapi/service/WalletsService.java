@@ -6,21 +6,20 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
-import java.util.Locale;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.web3j.crypto.Keys;
 
 import com.stablecoin.coreapi.generated.model.Wallet;
 import com.stablecoin.coreapi.generated.model.WalletChallenge;
 import com.stablecoin.coreapi.generated.model.WalletChallengeRequest;
 import com.stablecoin.coreapi.generated.model.WalletStatus;
 import com.stablecoin.coreapi.generated.model.WalletVerificationRequest;
-import com.stablecoin.coreapi.infra.repository.PostgresWalletChallengeRepository;
+import com.stablecoin.coreapi.infra.repository.PostgresWalletsRepository;
 import com.stablecoin.coreapi.models.WalletChallengeData;
+import com.stablecoin.coreapi.util.AddressUtils;
 import com.stablecoin.coreapi.util.Constants;
 import com.stablecoin.coreapi.util.SignatureUtils;
 import com.stablecoin.coreapi.web.error.ApiException;
@@ -30,32 +29,32 @@ import com.stablecoin.coreapi.web.error.ErrorCode;
 public class WalletsService {
 
 	@Value("${app.name}")
-	public String appName;
+	private String appName;
 
 	@Value("${app.domain}")
-	public String domain;
+	private String domain;
 
 	@Value("${app.URI}")
-	public String uri;
+	private String uri;
 
 	@Value("${app.chainId}")
-	public String chainId;
+	private String chainId;
 
 	@Value("${app.challengeExpirationSeconds}")
-	public int challengeExpirationSeconds;
+	private int challengeExpirationSeconds;
 
 	private static final SecureRandom secureRandom = new SecureRandom();
-	private final PostgresWalletChallengeRepository walletChallengeRepository;
+	private final PostgresWalletsRepository walletChallengeRepository;
 
-	public WalletsService(PostgresWalletChallengeRepository walletChallengeRepository) {
+	public WalletsService(PostgresWalletsRepository walletChallengeRepository) {
 		this.walletChallengeRepository = walletChallengeRepository;
 	}
 
 	@Transactional
 	public WalletChallenge generateWalletChallenge(WalletChallengeRequest request) {
 		// Calculate the checksum address and generate a nonce
-		String checksumAddress = validateAndChecksumWalletAddress(request.getWalletAddress());
-		String storedAddress = checksumAddress.toLowerCase(Locale.ROOT);
+		String checksumAddress = AddressUtils.validateAndChecksumWalletAddress(request.getWalletAddress());
+		String storedAddress = AddressUtils.normalizeAddress(request.getWalletAddress());
 		String nonce = new BigInteger(130, secureRandom).toString(32);
 		Instant issuedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
 		Instant expiresAt = issuedAt.plusSeconds(challengeExpirationSeconds);
@@ -82,8 +81,8 @@ public class WalletsService {
 	 */
 	@Transactional
 	public Wallet verifyWalletSignature(WalletVerificationRequest request) {
-		String checksumAddress = validateAndChecksumWalletAddress(request.getWalletAddress());
-		String storedAddress = checksumAddress.toLowerCase(Locale.ROOT);
+		String checksumAddress = AddressUtils.validateAndChecksumWalletAddress(request.getWalletAddress());
+		String storedAddress = AddressUtils.normalizeAddress(request.getWalletAddress());
 		String nonce = request.getNonce();
 
 		// retrieve the stored challenge and check it is unused and unexpired
@@ -119,25 +118,13 @@ public class WalletsService {
 	}
 
 	public Wallet getWallet(String address) {
-		String checksumAddress = validateAndChecksumWalletAddress(address);
-		String storedAddress = checksumAddress.toLowerCase(Locale.ROOT);
+		String storedAddress = AddressUtils.normalizeAddress(address);
 
 		Optional<Wallet> walletOptional = walletChallengeRepository.getWalletByAddress(storedAddress);
 		if (!walletOptional.isPresent()) {
 			throw new ApiException(ErrorCode.NOT_FOUND, "Wallet not found");
 		}
-		return walletOptional.get().walletAddress(checksumAddress);
-	}
-
-	private String validateAndChecksumWalletAddress(String address) {
-		if (address == null || address.isEmpty()) {
-			throw new ApiException(ErrorCode.INVALID_WALLET_ADDRESS, "Wallet address is required");
-		}
-		try {
-			return Keys.toChecksumAddress(address); // Validate Ethereum address format
-		} catch (RuntimeException e) {
-			throw new ApiException(ErrorCode.INVALID_WALLET_ADDRESS, "Invalid Ethereum wallet address: " + address);
-		}
+		return walletOptional.get().walletAddress(storedAddress);
 	}
 
 	private String generateMessage(String address, String nonce, Instant issuedAt, Instant expiresAt) {
