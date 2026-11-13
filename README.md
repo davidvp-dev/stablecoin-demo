@@ -65,7 +65,20 @@ stablecoin-demo/
 
    `forge install` adds the Solidity libraries (forge-std, OpenZeppelin, …) as git submodules. In a monorepo they are registered in the root `.gitmodules`, so `--recursive` is needed to download them.
 
-2. **Create the `.env` file** in the root from `.env.example`. Foundry also needs `PRIVATE_KEY_ANVIL`, `PRIVATE_KEY_SEPOLIA_WALLET`, `ETHERSCAN_API_KEY`, `RPC_URL_ANVIL` and `RPC_URL_SEPOLIA`.
+2. **Create the `.env` file** in the root from `.env.example`:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   - `POSTGRES_USER` and `POSTGRES_PASSWORD`: used by docker compose, core-api and chain-service.
+   - `RPC_URL_ANVIL` and `RPC_URL_SEPOLIA`: the RPC endpoints Foundry uses for `--rpc-url anvil | sepolia`.
+   - `ETHERSCAN_API_KEY`: only for `--verify` on Sepolia.
+   - For each network, with the suffix `_ANVIL` or `_SEPOLIA`, the deploy script reads:
+     - `PRIVATE_KEY_<NETWORK>`: the deployer key, which becomes `DEFAULT_ADMIN_ROLE`;
+     - `MINTER_ADDRESS_<NETWORK>`: the chain-service account (`MINTER_ROLE`);
+     - `PAUSER_ADDRESS_<NETWORK>` and `BLACKLISTER_ADDRESS_<NETWORK>`: the technical admin accounts.
+   - `EURD_CONTRACT_ADDRESS_<NETWORK>`: fill it in after deploying (step 5), with the address the script prints.
 
 3. **Link the `.env` into `contracts/`:**
 
