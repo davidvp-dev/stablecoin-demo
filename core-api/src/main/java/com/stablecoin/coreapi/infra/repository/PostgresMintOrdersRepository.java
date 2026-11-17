@@ -71,13 +71,44 @@ public class PostgresMintOrdersRepository {
                 .optional();
     }
 
-    public void insertMintOrderStateTransition(UUID orderId, String fromStatus, String toStatus, String cause) {
+    /**
+     * Finds the mint order with this SEPA reference and locks its row until the
+     * transaction ends (SELECT ... FOR UPDATE). Must run inside a transaction.
+     */
+    public Optional<MintOrderData> findMintOrderBySepaReferenceForUpdate(String sepaReference) {
+        return jdbc.sql(Constants.SELECT_MINT_ORDER_BY_SEPA_REFERENCE_FOR_UPDATE_QUERY)
+                .param("sepaReference", sepaReference)
+                .query((rs, rowNum) -> mapMintOrder(rs))
+                .optional();
+    }
+
+    /**
+     * Moves the order from fromStatus to toStatus. Returns false if the order was
+     * no longer in fromStatus, in which case nothing changes.
+     */
+    public boolean updateMintOrderStatus(UUID orderId, MintOrderStatus fromStatus, MintOrderStatus toStatus,
+            String failureReason) {
+        return jdbc.sql(Constants.UPDATE_MINT_ORDER_STATUS_QUERY)
+                .param("id", orderId)
+                .param("fromStatus", fromStatus.getValue())
+                .param("toStatus", toStatus.getValue())
+                .param("failureReason", failureReason)
+                .update() == 1;
+    }
+
+    /**
+     * Records a status change. applied = false keeps a rejected change for
+     * traceability (RF-CORE-22) without it being part of the order's history.
+     */
+    public void insertMintOrderStateTransition(UUID orderId, String fromStatus, String toStatus, String cause,
+            boolean applied) {
         jdbc.sql(Constants.INSERT_MINT_ORDER_STATE_TRANSITION_QUERY)
                 .param("orderId", orderId)
                 .param("orderType", ORDER_TYPE)
                 .param("fromStatus", fromStatus)
                 .param("toStatus", toStatus)
                 .param("cause", cause)
+                .param("applied", applied)
                 .update();
     }
 

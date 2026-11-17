@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.stablecoin.coreapi.generated.model.CreateMintOrderRequest;
 import com.stablecoin.coreapi.generated.model.MintOrder;
 import com.stablecoin.coreapi.generated.model.MintOrderDetail;
+import com.stablecoin.coreapi.generated.model.MintOrderStatus;
 import com.stablecoin.coreapi.generated.model.StatusTransition;
 import com.stablecoin.coreapi.generated.model.Wallet;
 import com.stablecoin.coreapi.generated.model.WalletStatus;
@@ -106,7 +107,7 @@ public class MintService {
 
 		// 7. INSERT the initial row in order_state_transitions:
 		mintOrdersRepository.insertMintOrderStateTransition(orderId,
-				null, "CREATED", "CreateMintOrder");
+				null, MintOrderStatus.CREATED.getValue(), "CreateMintOrder", true);
 
 		// 8. Map to MintOrder. insertMintOrder already copied id, status and created_at
 		// into mintOrderData. created = true, so the controller answers 201.

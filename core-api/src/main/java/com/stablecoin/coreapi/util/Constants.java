@@ -105,10 +105,54 @@ public final class Constants {
 			WHERE id = :id
 			""";
 
-	public static final String INSERT_MINT_ORDER_STATE_TRANSITION_QUERY = """
-			INSERT INTO order_state_transitions (order_id, order_type, from_status, to_status, cause)
-			VALUES (:orderId, :orderType, :fromStatus, :toStatus, :cause)
+	/**
+	 * Locks the mint order with this SEPA reference until the transaction ends.
+	 * Two transfers with the same reference at the same time are then processed
+	 * one after the other: the second one sees the status the first one left.
+	 */
+	public static final String SELECT_MINT_ORDER_BY_SEPA_REFERENCE_FOR_UPDATE_QUERY = """
+			SELECT id, wallet_address, amount_cents, sepa_reference, status, idempotency_key,
+			       request_hash, tx_hash, failure_reason, created_at, updated_at, expires_at
+			FROM mint_orders
+			WHERE sepa_reference = :sepaReference
+			FOR UPDATE
 			""";
+
+	/**
+	 * Changes the status only if the order is still in the expected one, so a
+	 * stale read can never overwrite a newer status. failure_reason is kept when
+	 * the new value is null.
+	 */
+	public static final String UPDATE_MINT_ORDER_STATUS_QUERY = """
+			UPDATE mint_orders
+			SET status = :toStatus,
+			    failure_reason = COALESCE(CAST(:failureReason AS TEXT), failure_reason),
+			    updated_at = now()
+			WHERE id = :id AND status = :fromStatus
+			""";
+
+	public static final String INSERT_MINT_ORDER_STATE_TRANSITION_QUERY = """
+			INSERT INTO order_state_transitions (order_id, order_type, from_status, to_status, cause, applied)
+			VALUES (:orderId, :orderType, :fromStatus, :toStatus, :cause, :applied)
+			""";
+
+	public static final String INSERT_BANK_TRANSFER_QUERY = """
+			INSERT INTO bank_transfers (direction, reference, amount_cents, counterparty_iban, outcome, mint_order_id)
+			VALUES (:direction, :reference, :amountCents, :counterpartyIban, :outcome, :mintOrderId)
+			RETURNING id, created_at
+			""";
+
+	/**
+	 * The payload is the full event envelope (docs/events.md) as JSON text; the
+	 * outbox publisher sends it to Kafka as is.
+	 */
+	public static final String INSERT_OUTBOX_EVENT_QUERY = """
+			INSERT INTO outbox_events (event_id, topic, message_key, event_type, payload)
+			VALUES (:eventId, :topic, :messageKey, :eventType, CAST(:payload AS JSONB))
+			""";
+
+	/** Kafka topic for the events core-api produces about mint orders. */
+	public static final String MINT_ORDERS_TOPIC = "mint-orders.v1";
 
 	/**
 	 * Status history of one order, oldest first. Rejected transitions
