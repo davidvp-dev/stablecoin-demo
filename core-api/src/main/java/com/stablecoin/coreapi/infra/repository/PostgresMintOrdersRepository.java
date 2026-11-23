@@ -83,6 +83,17 @@ public class PostgresMintOrdersRepository {
     }
 
     /**
+     * Locks and returns up to {@code limit} CREATED orders whose expires_at has
+     * passed. Must run inside a transaction.
+     */
+    public List<MintOrderData> lockExpiredCreatedMintOrders(int limit) {
+        return jdbc.sql(Constants.SELECT_EXPIRED_CREATED_MINT_ORDERS_FOR_UPDATE_QUERY)
+                .param("limit", limit)
+                .query((rs, rowNum) -> mapMintOrder(rs))
+                .list();
+    }
+
+    /**
      * Moves the order from fromStatus to toStatus. Returns false if the order was
      * no longer in fromStatus, in which case nothing changes.
      */

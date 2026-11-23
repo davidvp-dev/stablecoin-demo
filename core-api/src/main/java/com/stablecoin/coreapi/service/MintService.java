@@ -12,6 +12,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.web3j.crypto.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,8 +36,13 @@ import com.stablecoin.coreapi.web.error.ErrorCode;
 @Service
 public class MintService {
 
+	static final String CAUSE_EXPIRY_JOB = "ExpiryJob";
+
+	private static final Logger log = LoggerFactory.getLogger(MintService.class);
+
 	private final PostgresMintOrdersRepository mintOrdersRepository;
 	private final PostgresWalletsRepository walletsRepository;
+	private final MintOrderStateMachine stateMachine;
 	private static final SecureRandom secureRandom = new SecureRandom();
 
 	@Value("${app.issuerIban}")
@@ -44,14 +51,22 @@ public class MintService {
 	@Value("${app.sepaReferencePrefix}")
 	private String sepaReferencePrefix;
 
-	public MintService(PostgresMintOrdersRepository mintOrdersRepository, PostgresWalletsRepository walletsRepository) {
+	public MintService(PostgresMintOrdersRepository mintOrdersRepository, PostgresWalletsRepository walletsRepository,
+			MintOrderStateMachine stateMachine) {
 		this.mintOrdersRepository = mintOrdersRepository;
 		this.walletsRepository = walletsRepository;
+		this.stateMachine = stateMachine;
 	}
 
-	// Day 2 of IMPLEMENTATION_PLAN_V1 (CU-02, RF-CORE-04, 05).
-	// Mark the method @Transactional: the order row and its first state transition
-	// (steps 6-7) must be saved together.
+	/**
+	 * Creates a new mint order. The request is idempotent: if the same idempotency
+	 * key is used again, the same order is returned (if the request body is
+	 * identical) or an error is returned (if the request body differs).
+	 * 
+	 * @param idempotencyKey
+	 * @param request
+	 * @return
+	 */
 	@Transactional
 	public CreateMintOrderResult createMintOrder(String idempotencyKey, CreateMintOrderRequest request) {
 		String walletAddress = AddressUtils.normalizeAddress(request.getWalletAddress());
@@ -169,6 +184,28 @@ public class MintService {
 		detail.setExpiresAt(orderData.getExpiresAt());
 		detail.setHistory(history);
 		return detail;
+	}
+
+	/**
+	 * Moves up to {@code batchSize} unpaid orders whose expires_at has passed to
+	 * EXPIRED (RF-CORE-09). Run by MintOrderExpiryJob. An order being paid at the
+	 * same moment is skipped (its row is locked) and, if the payment fails, is
+	 * expired on the next run.
+	 *
+	 * @return how many orders were expired
+	 */
+	@Transactional
+	public int expireOverdueMintOrders(int batchSize) {
+		int expired = 0;
+		for (MintOrderData order : mintOrdersRepository.lockExpiredCreatedMintOrders(batchSize)) {
+			if (stateMachine.transition(order, MintOrderStatus.EXPIRED, CAUSE_EXPIRY_JOB, null)) {
+				expired++;
+			}
+		}
+		if (expired > 0) {
+			log.info("Expired {} unpaid mint orders", expired);
+		}
+		return expired;
 	}
 
 	private static String generateRandomAlphanumeric(int length) {

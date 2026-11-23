@@ -151,8 +151,46 @@ public final class Constants {
 			VALUES (:eventId, :topic, :messageKey, :eventType, CAST(:payload AS JSONB))
 			""";
 
+	/**
+	 * Oldest unpublished events first. FOR UPDATE SKIP LOCKED lets two core-api
+	 * instances run the publisher at the same time without sending the same row
+	 * twice: each one takes the rows the other hasn't locked.
+	 */
+	public static final String SELECT_PENDING_OUTBOX_EVENTS_QUERY = """
+			SELECT event_id, topic, message_key, event_type, payload::text AS payload
+			FROM outbox_events
+			WHERE published_at IS NULL
+			ORDER BY created_at, event_id
+			LIMIT :limit
+			FOR UPDATE SKIP LOCKED
+			""";
+
+	public static final String MARK_OUTBOX_EVENT_PUBLISHED_QUERY = """
+			UPDATE outbox_events
+			SET published_at = now()
+			WHERE event_id = :eventId
+			""";
+
+	/**
+	 * CREATED mint orders whose expiry has passed, locked for the expiry job.
+	 * SKIP LOCKED leaves out an order the bank simulator is paying right now; if
+	 * the payment fails, the next run picks it up.
+	 */
+	public static final String SELECT_EXPIRED_CREATED_MINT_ORDERS_FOR_UPDATE_QUERY = """
+			SELECT id, wallet_address, amount_cents, sepa_reference, status, idempotency_key,
+			       request_hash, tx_hash, failure_reason, created_at, updated_at, expires_at
+			FROM mint_orders
+			WHERE status = 'CREATED' AND expires_at <= now()
+			ORDER BY expires_at
+			LIMIT :limit
+			FOR UPDATE SKIP LOCKED
+			""";
+
 	/** Kafka topic for the events core-api produces about mint orders. */
 	public static final String MINT_ORDERS_TOPIC = "mint-orders.v1";
+
+	/** Kafka topic for the events chain-service produces (consumed on Day 4). */
+	public static final String CHAIN_EVENTS_TOPIC = "chain-events.v1";
 
 	/**
 	 * Status history of one order, oldest first. Rejected transitions
