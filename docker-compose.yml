@@ -108,8 +108,19 @@ services:
       - --port=8545
       - --chain-id=31337 # el chain id estándar de Anvil, explícito
       - --block-time=1 # un bloque por segundo, como una red "real"
+      # Estado persistente: sin esto la chain vive solo en memoria y cada reinicio del
+      # contenedor (o del portátil) la deja vacía, sin el contrato desplegado.
+      # --state carga el fichero al arrancar si existe y lo vuelca al salir;
+      # --state-interval lo vuelca además cada 5 s, por si el contenedor muere sin cerrar bien.
+      - --state=/home/foundry/state.json
+      - --state-interval=5
     ports:
       - "8545:8545"
+    volumes:
+      # Montado en el home de "foundry" (el usuario de la imagen, uid 1000) porque ese
+      # directorio ya existe y es suyo: Docker copia ese dueño al crear el volumen.
+      # En una ruta nueva el volumen sería de root y Anvil no podría escribir.
+      - anvil-state:/home/foundry
     healthcheck:
       test:
         ["CMD", "cast", "block-number", "--rpc-url", "http://localhost:8545"]
@@ -119,3 +130,4 @@ services:
 # Discos persistentes gestionados por Docker
 volumes:
   pgdata:
+  anvil-state: # chain de Anvil (contrato, balances, bloques); se borra con `docker compose down -v`
