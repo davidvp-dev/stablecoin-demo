@@ -28,19 +28,32 @@ paths:
           $ref: "#/components/responses/ServiceUnavailable"
   /health:
     get:
-      summary: Event-reading progress
-      description: Last processed block and lag behind the node head. (RF-CHAIN-11)
+      summary: Configuration checks and event-reading progress
+      description: |
+        Checks that chain-service is configured for the chain it is connected to: the node's chain id
+        matches the configured one, the contract is deployed at the configured address, it has 6
+        decimals, and the configured minter account holds MINTER_ROLE. Also reports the last processed
+        block and the lag behind the node head. (RF-CHAIN-11)
       operationId: getHealth
       tags: [chain]
       responses:
         "200":
-          description: Health read
+          description: Every check passed (status UP)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChainHealth"
         "503":
-          $ref: "#/components/responses/ServiceUnavailable"
+          description: |
+            A check failed (status DOWN, `application/json`, with the failed checks in `problems`), or
+            the RPC node is not reachable (`application/problem+json`, code RPC_UNAVAILABLE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChainHealth"
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 components:
   responses:
     ServiceUnavailable:
@@ -81,23 +94,77 @@ components:
         readAt:
           type: string
           format: date-time
+    HealthStatus:
+      type: string
+      description: UP when every check passes, DOWN otherwise
+      enum: [UP, DOWN]
+    HealthChecks:
+      type: object
+      required: [chainIdMatches, contractDeployed, decimalsMatch, minterHasRole]
+      properties:
+        chainIdMatches:
+          type: boolean
+          description: The node's chain id equals the configured one
+        contractDeployed:
+          type: boolean
+          description: There is contract code at the configured address
+        decimalsMatch:
+          type: boolean
+          description: The contract reports 6 decimals (1 cent = 10,000 units)
+        minterHasRole:
+          type: boolean
+          description: The configured minter account holds MINTER_ROLE
     ChainHealth:
       type: object
-      required: [chainId, lastProcessedBlock, headBlock, lagBlocks, confirmationsRequired]
+      required:
+        [status, chainId, expectedChainId, contractAddress, minterAddress, checks, problems,
+         headBlock, confirmationsRequired]
       properties:
+        status:
+          $ref: "#/components/schemas/HealthStatus"
         chainId:
           type: integer
           format: int64
+          description: Chain id reported by the node
           example: 31337
+        expectedChainId:
+          type: integer
+          format: int64
+          description: Chain id chain-service is configured for
+          example: 31337
+        contractAddress:
+          type: string
+          example: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+        minterAddress:
+          type: string
+          description: Account derived from the configured minter key
+          example: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+        paused:
+          type: boolean
+          nullable: true
+          description: |
+            Whether the contract is paused. Informational: a pause is an operator decision, so it does
+            not make the status DOWN. Null when the contract could not be read.
+        checks:
+          $ref: "#/components/schemas/HealthChecks"
+        problems:
+          type: array
+          description: One message per failed check; empty when status is UP
+          items:
+            type: string
         lastProcessedBlock:
           type: integer
           format: int64
+          nullable: true
+          description: Last block the event reader processed; null until it saves its first checkpoint
         headBlock:
           type: integer
           format: int64
         lagBlocks:
           type: integer
           format: int64
+          nullable: true
+          description: headBlock - lastProcessedBlock; null while lastProcessedBlock is null
         confirmationsRequired:
           type: integer
           example: 3
