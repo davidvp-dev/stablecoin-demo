@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.stablecoin</groupId>
 	<artifactId>chain-service</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>1.0.0-SNAPSHOT</version>
 	<name>chain-service</name>
 	<description/>
 	<url/>
@@ -28,6 +28,11 @@
 	</scm>
 	<properties>
 		<java.version>25</java.version>
+		<!-- Same version as org.web3j:crypto in core-api -->
+		<web3j.version>6.0.0</web3j.version>
+		<!-- ABI exported by Foundry; the Java wrapper is generated from it on every build -->
+		<eurd.abi.file>${project.basedir}/../contracts/abi/EURDemo.abi.json</eurd.abi.file>
+		<web3j.generated.dir>${project.build.directory}/generated-sources/web3j</web3j.generated.dir>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -64,6 +69,12 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-kafka</artifactId>
 		</dependency>
+		<!-- Ethereum JSON-RPC client, signing and the base classes of the generated contract wrapper -->
+		<dependency>
+			<groupId>org.web3j</groupId>
+			<artifactId>core</artifactId>
+			<version>${web3j.version}</version>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -71,6 +82,61 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!--
+				Generates the EURDemo Java wrapper from the ABI with web3j codegen.
+				web3j-maven-plugin is not used because its latest release (5.0.2) is
+				built on codegen 5, while the runtime here is web3j 6. Running codegen
+				6 directly keeps the generated code and the runtime on the same version.
+			-->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>generate-eurdemo-wrapper</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>java</goal>
+						</goals>
+						<configuration>
+							<mainClass>org.web3j.codegen.SolidityFunctionWrapperGenerator</mainClass>
+							<includeProjectDependencies>false</includeProjectDependencies>
+							<includePluginDependencies>true</includePluginDependencies>
+							<arguments>
+								<argument>--abiFile=${eurd.abi.file}</argument>
+								<argument>--outputDir=${web3j.generated.dir}</argument>
+								<argument>--package=com.stablecoin.chainservice.generated.contracts</argument>
+								<argument>--contractName=EURDemo</argument>
+							</arguments>
+						</configuration>
+					</execution>
+				</executions>
+				<dependencies>
+					<dependency>
+						<groupId>org.web3j</groupId>
+						<artifactId>codegen</artifactId>
+						<version>${web3j.version}</version>
+					</dependency>
+				</dependencies>
+			</plugin>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>build-helper-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>add-web3j-sources</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>add-source</goal>
+						</goals>
+						<configuration>
+							<sources>
+								<source>${web3j.generated.dir}</source>
+							</sources>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 		</plugins>
 	</build>
