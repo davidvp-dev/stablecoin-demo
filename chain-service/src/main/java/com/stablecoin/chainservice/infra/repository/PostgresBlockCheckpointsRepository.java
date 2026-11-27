@@ -15,6 +15,13 @@ public class PostgresBlockCheckpointsRepository {
 			WHERE chain_id = :chainId AND contract_address = :contractAddress
 			""";
 
+	private static final String UPSERT_LAST_PROCESSED_BLOCK_QUERY = """
+			INSERT INTO block_checkpoints (chain_id, contract_address, last_processed_block)
+			VALUES (:chainId, :contractAddress, :block)
+			ON CONFLICT (chain_id, contract_address)
+			DO UPDATE SET last_processed_block = EXCLUDED.last_processed_block, updated_at = now()
+			""";
+
 	private final JdbcClient jdbc;
 
 	public PostgresBlockCheckpointsRepository(JdbcClient jdbc) {
@@ -31,5 +38,13 @@ public class PostgresBlockCheckpointsRepository {
 				.param("contractAddress", contractAddress.toLowerCase(Locale.ROOT))
 				.query(Long.class)
 				.optional();
+	}
+
+	public void saveLastProcessedBlock(long chainId, String contractAddress, long block) {
+		jdbc.sql(UPSERT_LAST_PROCESSED_BLOCK_QUERY)
+				.param("chainId", chainId)
+				.param("contractAddress", contractAddress.toLowerCase(Locale.ROOT))
+				.param("block", block)
+				.update();
 	}
 }
