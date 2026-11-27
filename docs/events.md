@@ -40,7 +40,7 @@ Every event shares the same envelope:
 | `eventId` | UUID | Unique id of the event; the idempotency key for consumers |
 | `eventType` | string | One of the event names below |
 | `version` | integer | Payload version, `1` for this contract |
-| `occurredAt` | ISO-8601 UTC | When the fact happened (not when it was published) |
+| `occurredAt` | ISO-8601 UTC | When the fact happened (not when it was published). For `MintConfirmed` / `RedeemConfirmed` it is the timestamp of the block that holds the log |
 | `orderId` | UUID | core-api order id; same value as the Kafka key. `null` only for a redeem with an unknown on-chain id (see conversion rules) |
 | `payload` | object | Event-specific fields |
 
@@ -50,6 +50,7 @@ Every event shares the same envelope:
 - **chain-service** must derive it **deterministically** so a republish after a crash has the same id:
   - `MintSubmitted` / `MintFailed`: UUID v5 of `"<eventType>:<orderId>"`.
   - `MintConfirmed` / `RedeemConfirmed`: UUID v5 of `"<chainId>:<txHash>:<logIndex>"`.
+  - UUID v5 (RFC 4122, SHA-1) with the project namespace **`e60e415b-bae5-42e7-8980-db070c4b56fa`**. The name is the UTF-8 string above, with `orderId` in its canonical lower-case form, `txHash` as lower-case `0x` hex and `chainId` / `logIndex` in decimal. Example: `"MintSubmitted:9b2e4c1a-7d3f-4e8b-9a2c-5d6e7f8a9b0c"`.
 
 ## Events
 
@@ -57,11 +58,15 @@ Every event shares the same envelope:
 |---|---|---|---|
 | `MintApproved` | `mint-orders.v1` | A mint order is paid and auto-approved (status `APPROVED`) | `wallet`, `amountCents` |
 | `MintSubmitted` | `chain-events.v1` | The node accepts the `mint` transaction | `txHash`, `nonce` |
-| `MintConfirmed` | `chain-events.v1` | The `TokensEmitted` event reaches N confirmations | `wallet`, `amountCents`, `txHash`, `blockNumber`, `confirmations` |
+| `MintConfirmed` | `chain-events.v1` | The `TokensEmitted` event reaches N confirmations | `wallet`, `amountCents`, `amountUnits`, `onchainId`, `txHash`, `blockNumber`, `confirmations` |
 | `MintFailed` | `chain-events.v1` | The transaction reverts or retries are exhausted | `reason`, `txHash` (if any) |
-| `RedeemConfirmed` | `chain-events.v1` | The `TokensRedeemed` event reaches N confirmations | `holder`, `amountCents`, `onchainId`, `txHash`, `blockNumber`, `confirmations` |
+| `RedeemConfirmed` | `chain-events.v1` | The `TokensRedeemed` event reaches N confirmations | `holder`, `amountCents`, `amountUnits`, `onchainId`, `txHash`, `blockNumber`, `confirmations` |
 
 Payload field types: addresses are EIP-55 checksum strings, `amountCents` and `blockNumber` are integers, `txHash` is a `0x`-prefixed 32-byte hex string, `nonce` and `confirmations` are integers, `reason` is a human-readable string.
+
+- **`amountUnits`** (added in v1, backward compatible): the raw token amount from the log, as a decimal string, because it can exceed a 64-bit integer. `amountCents` is `amountUnits / 10,000`, or `null` when `amountUnits` isn't a multiple of 10,000. `redeem()` accepts any amount, so a holder can burn, for example, 1 unit; the burn still happened, so the event is published and core-api sends it to review instead of guessing a rounding.
+- **`onchainId`**: the raw `bytes32` order id from the log, lower-case `0x` hex.
+- **`confirmations`**: `headBlock − blockNumber + 1` when chain-service observed the log. A log is published once it has at least N confirmations (`app.chain.confirmations`: 1 on Anvil, 2–3 on Sepolia).
 
 ### Effect on core-api (RF-CORE-11, 13)
 
@@ -97,5 +102,7 @@ bytes32  0x000000000000000000000000000000009b2e4c1a7d3f4e8b9a2c5d6e7f8a9b0c
 ```
 
 The rule is reversible, so chain-service turns an on-chain `orderId` back into the core-api UUID without any lookup (RF-CHAIN-09). A bytes32 whose first 16 bytes are not zero cannot belong to an order of the system (for example, someone called `redeem()` directly with a made-up id). The burn still happened, so chain-service still publishes `RedeemConfirmed`, with `orderId: null`, the raw value in `payload.onchainId` and the Kafka key set to that bytes32. core-api records it for manual review instead of dropping it (RF-CORE-15).
+
+The same applies to `MintConfirmed`: a `TokensEmitted` with a foreign bytes32 can only come from a mint sent outside chain-service by an account with `MINTER_ROLE`. It is published with `orderId: null` and the bytes32 as key, so core-api can flag it; it is never dropped.
 
 The same rule produces the `onchainId` returned by `POST /api/redeem-orders`.
