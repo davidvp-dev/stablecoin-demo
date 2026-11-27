@@ -49,9 +49,13 @@ public class Web3jConfig {
 	 *
 	 * Not named "transactionManager": that name belongs to the JPA transaction
 	 * manager, which has nothing to do with blockchain transactions.
+	 *
+	 * Declared as RawTransactionManager (not the TransactionManager interface)
+	 * because MintSender uses its sign(): it signs the mint, saves the hash, and
+	 * only then sends it.
 	 */
 	@Bean
-	public TransactionManager minterTransactionManager(Web3j web3j, Credentials minterCredentials,
+	public RawTransactionManager minterTransactionManager(Web3j web3j, Credentials minterCredentials,
 			ChainProperties properties) {
 		return new RawTransactionManager(web3j, minterCredentials, properties.chainId(), new NoOpProcessor(web3j));
 	}
@@ -64,8 +68,9 @@ public class Web3jConfig {
 	}
 
 	/**
-	 * The contract, ready to call. Views (balanceOf, totalSupply, hasRole...) are
-	 * eth_call and cost nothing; mint() is signed by the minter and sent.
+	 * The contract, ready to call. Views (balanceOf, totalSupply, hasRole,
+	 * isMintOrderSubmitted...) are eth_call and cost nothing. MintSender only uses
+	 * mint() to encode the call data, and signs and sends the transaction itself.
 	 */
 	@Bean
 	public EURDemo eurDemo(ChainProperties properties, Web3j web3j, TransactionManager minterTransactionManager,
