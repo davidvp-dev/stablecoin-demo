@@ -1,0 +1,55 @@
+{
+  // Run and Debug configurations for the two Spring Boot services.
+  // "(Sepolia)" activates the "sepolia" profile: application-sepolia.properties is
+  // loaded on top of application.properties (see docs/deployments.md).
+  // cwd must be the module folder, so spring.config.import finds ../.env.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "core-api (Anvil)",
+      "request": "launch",
+      "mainClass": "com.stablecoin.coreapi.CoreApiApplication",
+      "projectName": "core-api",
+      "cwd": "${workspaceFolder}/core-api"
+    },
+    {
+      "type": "java",
+      "name": "core-api (Sepolia)",
+      "request": "launch",
+      "mainClass": "com.stablecoin.coreapi.CoreApiApplication",
+      "projectName": "core-api",
+      "cwd": "${workspaceFolder}/core-api",
+      "env": { "SPRING_PROFILES_ACTIVE": "sepolia" }
+    },
+    {
+      "type": "java",
+      "name": "chain-service (Anvil)",
+      "request": "launch",
+      "mainClass": "com.stablecoin.chainservice.ChainServiceApplication",
+      "projectName": "chain-service",
+      "cwd": "${workspaceFolder}/chain-service"
+    },
+    {
+      "type": "java",
+      "name": "chain-service (Sepolia)",
+      "request": "launch",
+      "mainClass": "com.stablecoin.chainservice.ChainServiceApplication",
+      "projectName": "chain-service",
+      "cwd": "${workspaceFolder}/chain-service",
+      "env": { "SPRING_PROFILES_ACTIVE": "sepolia" }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Backends (Anvil)",
+      "configurations": ["core-api (Anvil)", "chain-service (Anvil)"],
+      "stopAll": true
+    },
+    {
+      "name": "Backends (Sepolia)",
+      "configurations": ["core-api (Sepolia)", "chain-service (Sepolia)"],
+      "stopAll": true
+    }
+  ]
+}

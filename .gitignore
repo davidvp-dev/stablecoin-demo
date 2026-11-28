@@ -1,6 +1,9 @@
 .env
 .DS_Store
-.vscode
+# Editor settings are personal, except the shared ones
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
 
 *.pdf
 
