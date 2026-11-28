@@ -99,8 +99,10 @@ stablecoin-demo/
    ```bash
    cd contracts
    forge script script/DeployEURDemo.s.sol --rpc-url anvil --broadcast            # local Anvil
-   forge script script/DeployEURDemo.s.sol --rpc-url sepolia --broadcast --verify # Sepolia testnet
+   forge script script/DeployEURDemo.s.sol --rpc-url sepolia --broadcast --verify --skip-simulation # Sepolia testnet
    ```
+
+   On Sepolia, `--skip-simulation` is required: without it, forge takes the gas limit from its local simulation, which uses older gas costs, and the deployment runs out of gas. See [`docs/deployments.md`](docs/deployments.md#sepolia-testnet-chain-id-11155111).
 
 ## Production solutions out of scope
 

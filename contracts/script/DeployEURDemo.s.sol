@@ -10,7 +10,9 @@ import {EURDemo} from "../src/EURDemo.sol";
  *         keys and role addresses are read from .env with the network suffix (_ANVIL or _SEPOLIA).
  *
  *   Anvil:   forge script script/DeployEURDemo.s.sol --rpc-url anvil --broadcast
- *   Sepolia: forge script script/DeployEURDemo.s.sol --rpc-url sepolia --broadcast --verify
+ *   Sepolia: forge script script/DeployEURDemo.s.sol --rpc-url sepolia --broadcast --verify --skip-simulation
+ *            (--skip-simulation: the gas limit comes from the node; forge's local simulation uses older gas
+ *            costs and the deployment runs out of gas. See docs/deployments.md)
  *
  *   Required variables (see .env.example):
  *     PRIVATE_KEY_<NETWORK>          deployer key; the deployer becomes DEFAULT_ADMIN_ROLE
